@@ -4,6 +4,7 @@ import sys
 import torchvision
 
 
+
 # 检查是否有可用的GPU
 if torch.cuda.is_available():
     print(torch.version.cuda)
