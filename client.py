@@ -2,14 +2,15 @@ import logging
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+import socket
+import json
 
 class Client(object):
     """Simulated federated learning client."""
 
     def __init__(self, client_id):
         self.client_id = client_id
-
+        
     def __repr__(self):
         return 'Client #{}: {} samples in labels: {}'.format(
             self.client_id, len(self.data), set([label for _, label in self.data]))
@@ -21,14 +22,20 @@ class Client(object):
 
     def set_shard(self, shard):
         self.shard = shard
-
+    def set_socket(self, ip, port):
+        self.ip = ip
+        self.port = port
+        
     # Server interactions
     def download(self, argv):
         # Download from the server.
-        try:
-            return argv.copy()
-        except:
-            return argv
+        if self.socket.state == False:
+            try:
+                return argv.copy()
+            except:
+                return argv
+        # else:
+            
 
     def upload(self, argv):
         # Upload to the server

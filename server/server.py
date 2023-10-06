@@ -8,7 +8,8 @@ import sys
 from threading import Thread
 import torch
 import utils.dists as dists  # pylint: disable=no-name-in-module
-
+import socket
+import json
 
 class Server(object):
     """Basic federated learning server."""
@@ -21,7 +22,7 @@ class Server(object):
         logging.info('Booting {} server...'.format(self.config.server))
 
         model_path = self.config.paths.model
-        total_clients = self.config.clients.total
+        client_cfg = self.config.clients
 
         # Add fl_model to import path
         sys.path.append(model_path)
@@ -29,7 +30,9 @@ class Server(object):
         # Set up simulated server
         self.load_data()
         self.load_model()
-        self.make_clients(total_clients)
+        self.make_clients(client_cfg)
+
+
 
     def load_data(self):
         import fl_model  # pylint: disable=import-error
@@ -77,25 +80,44 @@ class Server(object):
             self.saved_reports = {}
             self.save_reports(0, [])  # Save initial model
 
-    def make_clients(self, num_clients):
+    def make_clients(self, client_cfg):
         IID = self.config.data.IID
         labels = self.loader.labels
         loader = self.config.loader
         loading = self.config.data.loading
+        socket_state = client_cfg.socket.state
+        client_ip = client_cfg.socket.ip
+        client_port = client_cfg.socket.port
+        server_ip = self.config.server.socket.ip
+        server_port = self.config.server.socket.port
+
+        if socket_state:
+            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_socket.bind((server_ip,server_port))
+            server_socket.listen(client_cfg.total)
+            logging.info('Server start, waiting for connecting')
 
         if not IID:  # Create distribution for label preferences if non-IID
             dist = {
-                "uniform": dists.uniform(num_clients, len(labels)),
-                "normal": dists.normal(num_clients, len(labels))
-            }[self.config.clients.label_distribution]
+                "uniform": dists.uniform(client_cfg.total, len(labels)),
+                "normal": dists.normal(client_cfg.total, len(labels))
+            }[client_cfg.label_distribution]
             random.shuffle(dist)  # Shuffle distribution
 
         # Make simulated clients
         clients = []
-        for client_id in range(num_clients):
+        for client_id in range(client_cfg.total):
 
             # Create new client
             new_client = client.Client(client_id)
+            if socket_state:
+                client_socket, addr = server_socket.accept()
+
+                # new_client.set_socket(client_ip[client_id], client_port[client_id])
+                # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                # logging.info('Connecting to client {}'.format(client_id))
+                # client_socket.connect((client_ip[client_id], client_port[client_id]))
+                # logging.info(' Client {} connected'.format(client_id))
 
             if not IID:  # Configure clients for non-IID data
                 if self.config.data.bias:

@@ -14,7 +14,7 @@ logging.basicConfig(
 
 # Set up parser
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', type=str, default='./template.json',
+parser.add_argument('-c', '--config', type=str, default='./config.json',
                     help='Configuration file for server.')
 parser.add_argument('-o', '--output', type=str, default='./output.pkl',
                     help='Output pickle file')
@@ -54,7 +54,7 @@ def main():
     # Perform PCA on weight vectors
     logging.info('Assembling output...')
     output = [(clients[i].client_id, clients[i].pref, weight) for i, weight in enumerate(weight_vecs)]
-    logging.into('Writing output to binary...')
+    logging.info('Writing output to binary...')
     with open(args.output, 'wb') as f:
         pickle.dump(output, f)
 

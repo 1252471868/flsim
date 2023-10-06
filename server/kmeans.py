@@ -46,7 +46,6 @@ class KMeansServer(Server):
     # Output model weights
     def model_weights(self, clients):
         # Configure clients to train on local data
-        self.configuration(clients)
 
         # Train on local data for profiling purposes
         threads = [Thread(target=client.train) for client in self.clients]
