@@ -18,8 +18,8 @@ class Config(object):
 
         # -- Clients --
         fields = ['total', 'per_round', 'label_distribution',
-                  'do_test', 'test_partition']
-        defaults = (0, 0, 'uniform', False, None)
+                  'do_test', 'test_partition','socket']
+        defaults = (0, 0, 'uniform', False, None, None)
         params = [config['clients'].get(field, defaults[i])
                   for i, field in enumerate(fields)]
         self.clients = namedtuple('clients', fields)(*params)
@@ -59,8 +59,11 @@ class Config(object):
                   for i, field in enumerate(fields)]
         # Set specific model path
         params[fields.index('model')] += '/' + self.model
-
         self.paths = namedtuple('paths', fields)(*params)
 
         # -- Server --
-        self.server = config['server']
+        fields = ['type', 'socket']
+        defaults = ('basic', None)
+        params = [config['server'].get(field, defaults[i])
+                  for i, field in enumerate(fields)]
+        self.server = namedtuple('server', fields)(*params)

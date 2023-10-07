@@ -46,7 +46,6 @@
     "server": {
         "type":"basic",
         "socket": {
-            "state": false,
             "ip": [
                 "10.0.0.10"
             ],

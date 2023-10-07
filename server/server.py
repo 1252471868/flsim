@@ -85,11 +85,11 @@ class Server(object):
         labels = self.loader.labels
         loader = self.config.loader
         loading = self.config.data.loading
-        socket_state = client_cfg.socket.state
-        client_ip = client_cfg.socket.ip
-        client_port = client_cfg.socket.port
-        server_ip = self.config.server.socket.ip
-        server_port = self.config.server.socket.port
+        socket_state = client_cfg.socket.get('state')
+        client_ip = client_cfg.socket.get('ip')
+        client_port = client_cfg.socket.get('port')
+        server_ip = self.config.server.socket.get('ip')
+        server_port = self.config.server.socket.get('port')
 
         if socket_state:
             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -110,6 +110,7 @@ class Server(object):
 
             # Create new client
             new_client = client.Client(client_id)
+            new_client.set_socket(socket_state, client_ip, client_port)
             if socket_state:
                 client_socket, addr = server_socket.accept()
 

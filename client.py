@@ -22,14 +22,15 @@ class Client(object):
 
     def set_shard(self, shard):
         self.shard = shard
-    def set_socket(self, ip, port):
+    def set_socket(self, socket_state, ip, port):
+        self.socket_state = socket_state
         self.ip = ip
         self.port = port
         
     # Server interactions
     def download(self, argv):
         # Download from the server.
-        if self.socket.state == False:
+        if self.socket_state == False:
             try:
                 return argv.copy()
             except:

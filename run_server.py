@@ -38,7 +38,7 @@ def main():
         "magavg": server.MagAvgServer(fl_config),
         # "dqn": server.DQNServer(fl_config), # DQN server disabled
         # "dqntrain": server.DQNTrainServer(fl_config), # DQN server disabled
-    }[fl_config.server]
+    }[fl_config.server.type]
     fl_server.boot()
 
     # Run federated learning
