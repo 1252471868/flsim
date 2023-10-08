@@ -2,7 +2,7 @@ import argparse
 import client
 import config
 import logging
-# import os
+import os
 import pickle
 from sklearn.decomposition import PCA
 import server

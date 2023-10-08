@@ -2,7 +2,7 @@ import argparse
 import client
 import config
 import logging
-# import os
+import os
 import server
 
 
@@ -27,22 +27,12 @@ def main():
 
     # Read configuration file
     fl_config = config.Config(args.config)
-
+    id = int(input('Input client ID: '))
+    fl_client = client.Client(id)
+    fl_client.boot(fl_config)
     # Initialize server
-    fl_server = {
-        "basic": server.Server(fl_config),
-        "accavg": server.AccAvgServer(fl_config),
-        "directed": server.DirectedServer(fl_config),
-        "kcenter": server.KCenterServer(fl_config),
-        "kmeans": server.KMeansServer(fl_config),
-        "magavg": server.MagAvgServer(fl_config),
-        # "dqn": server.DQNServer(fl_config), # DQN server disabled
-        # "dqntrain": server.DQNTrainServer(fl_config), # DQN server disabled
-    }[fl_config.server]
-    fl_server.boot()
-
     # Run federated learning
-    fl_server.run()
+    fl_client.run()
 
     # Delete global model
     os.remove(fl_config.paths.model + '/global')

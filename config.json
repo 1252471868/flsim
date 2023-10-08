@@ -1,19 +1,10 @@
 {
     "clients": {
-        "total": 10,
-        "per_round":2,
+        "total": 2,
+        "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
-        "test_partition": 0.2,
-        "socket": {
-            "state": false,
-            "ip": [
-                "10.0.0.20"
-            ],
-            "port": [
-                5001
-            ]
-        }       
+        "test_partition": 0.2     
     },
     "data": {
         "loading": "dynamic",
@@ -46,12 +37,8 @@
     "server": {
         "type":"basic",
         "socket": {
-            "ip": [
-                "10.0.0.10"
-            ],
-            "port": [
-                5000
-            ]
+            "ip": "10.0.0.10",
+            "port":5000
         }
     }
 }
