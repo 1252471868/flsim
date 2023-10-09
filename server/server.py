@@ -5,13 +5,17 @@ import numpy as np
 import pickle
 import random
 import sys
-from threading import Thread
+from threading import Thread, Lock
 import torch
 import utils.dists as dists  # pylint: disable=no-name-in-module
 import socket
 import socketserver
 import json
+import jsonpickle
+from signal import signal, SIGPIPE, SIG_DFL
+import struct
 
+mutex = Lock()
 # clients list for server
 class ClientList(object):
 	def __init__(self):
@@ -23,7 +27,7 @@ class ClientList(object):
 	def add_client(self, client_id, client_socket):
 		self.id_list.append(client_id)
 		self.socket_list.append(client_socket)		
-		self.report_state_list_list.append(False)
+		self.report_state_list.append(False)
 		self.report_list.append(client.Report())
 
 	def get_socket(self, client_id):
@@ -39,7 +43,8 @@ class ClientList(object):
 		self.report_state_list = [False for r in self.report_state_list]
 
 	def get_report_state(self, client_id):
-		return self.report_state_list[self.id_list.index(client_id)]
+		state = [self.report_state_list[self.id_list.index(id)] for id in client_id]
+		return state
 	
 	def set_report(self, client_id, report):
 		self.report_list[self.id_list.index(client_id)] = report
@@ -118,15 +123,22 @@ class Server(object):
 			self.saved_reports = {}
 			self.save_reports(0, [])  # Save initial model
 
+	def msg_handler(self, server_ip,server_port):
+		logging.info('Server start, waiting for connecting')
+		socketserver.TCPServer.allow_reuse_address = True
+		s=socketserver.ThreadingTCPServer((server_ip,server_port), TCPServerHandler)
+		s.serve_forever()
 
 	def connect_clients(self, client_cfg):
 		IID = self.config.data.IID
 		labels = self.loader.labels
 		loader = self.config.loader
 		loading = self.config.data.loading
+		signal(SIGPIPE, SIG_DFL)
 		server_ip = self.config.server.socket.get('ip')
 		server_port = self.config.server.socket.get('port')
-
+		msg_thread = Thread(target=self.msg_handler, args=(server_ip,server_port,))
+		msg_thread.start()
  # Make simulated clients
 		if not IID:  # Create distribution for label preferences if non-IID
 			dist = {
@@ -161,13 +173,12 @@ class Server(object):
 			logging.info('Label distribution: {}'.format(
 				[[client.pref for client in clients].count(label) for label in labels]))
 
-		logging.info('Server start, waiting for connecting')
-		s=socketserver.ThreadingTCPServer((server_ip,server_port), TCPServerHandler)
-		s.serve_forever()
+
 		#Wait for connection
 		while len(clients_list.id_list) < client_cfg.total :
 			pass
-
+		self.send_data(0,'INFO','test')
+		# self.send_data(1,'INFO','test')
 		if loading == 'static':
 			if loader == 'shard':  # Create data shards
 				self.loader.create_shards()
@@ -215,12 +226,12 @@ class Server(object):
 		self.configuration(sample_clients)
 
 		# Wait for reports
-		while all(clients_list.get_report_state(sample_clients_id)):
+		while not all(clients_list.get_report_state(sample_clients_id)):
 			pass
 		# Run clients using multithreading for better parallelism
-		threads = [Thread(target=client.run) for client in sample_clients]
-		[t.start() for t in threads]
-		[t.join() for t in threads]
+		# threads = [Thread(target=client.run) for client in sample_clients]
+		# [t.start() for t in threads]
+		# [t.join() for t in threads]
 
 		# Recieve client updates
 		reports = self.reporting(sample_clients)
@@ -393,6 +404,7 @@ class Server(object):
 			logging.critical('Unknown data loader type')
 
 		# Send data to client
+		
 		self.send_data(client.client_id, 'CONFIG', data)
 		# client.set_data(data, self.config)
 
@@ -417,20 +429,19 @@ class Server(object):
 		msg['CMD'] = cmd
 		msg['DATA'] = data
 		# Convert data to JSON string
-		msg_json = json.dumps(msg)
+		msg_json = jsonpickle.encode(msg).encode()
+		# data_len = str(len(msg_json)).encode
+		data2send = struct.pack('>I', len(msg_json)) + msg_json
+		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
 		client_socket = clients_list.get_socket(client_id)
-		client_socket.sendall(msg_json.encode())
+		# server.sendall(data_len)
+		client_socket.sendall(data2send)
 
 class TCPServerHandler(socketserver.BaseRequestHandler):
 	def handle(self):
-		# print('conn is:',self.request)
-		# print('addr is:',self.client_address)
 		while True:
 			try:
-				msg_json = self.request.recv(1024).decode()
-				msg = json.loads(msg_json)
-				cmd = msg['CMD']
-				data = msg['DATA']
+				cmd, data = self.recv_data()
 				# New clients will send ID to the server
 				if cmd == 'ID':
 					client_id = data
@@ -442,11 +453,43 @@ class TCPServerHandler(socketserver.BaseRequestHandler):
 					client_id = clients_list.get_id(self.request)
 					clients_list.set_report(client_id, report)
 					clients_list.set_report_state(client_id)
+					logging.info('Receive report from client {} '.format(self.client_address))
+				if cmd == 'INFO':
+					logging.info('{}'.format(data))
 				
 
 			except Exception as e:
 				print(e)
 				print('exception occured ,go to accpet next ')
 				break
+			
+	def recv_data(self):
+		# datalength : 4 bytes
+		raw_data = self.recvall(4)
+		if not raw_data:
+			return None, None
+		msg_len = struct.unpack('>I', raw_data)[0]
+		# logging.info('data len json: {} size:{}'.format(data_len_json,len(data_len_json)))
+		# data_len = json.loads(data_len_json)
+		# data_len = jsonpickle.decode(data_len_json)
+		# logging.info('recv datasize: {}'.format(msg_len))
+		# data is split across multiple recv()
+		msg_json = self.recvall(msg_len)
+		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
+		msg =  jsonpickle.decode(msg_json.decode())
+		cmd = msg['CMD']
+		data = msg['DATA']
+		return cmd, data
+	
+	#receive all raw data
+	def recvall(self, data_len):
+		data = bytearray()
+		while len(data)<data_len:
+			packet = self.request.recv(data_len - len(data))
+			if not packet:
+				return None
+			data.extend(packet)
+		return data
+
 
 

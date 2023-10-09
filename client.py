@@ -4,171 +4,196 @@ import torch.nn as nn
 import torch.optim as optim
 import socket
 import json
+import sys
+from threading import Lock
+import jsonpickle
 import random
+from signal import signal, SIGPIPE, SIG_DFL
 import utils.dists as dists  # pylint: disable=no-name-in-module
+import struct
+
+mutex = Lock()
 
 class Client(object):
-    """Simulated federated learning client."""
+	"""Simulated federated learning client."""
 
-    def __init__(self, client_id):
-        self.client_id = client_id
-        
-    def __repr__(self):
-        return 'Client #{}: {} samples in labels: {}'.format(
-            self.client_id, len(self.data), set([label for _, label in self.data]))
-    # Set up client
-    def boot(self, config):
-        # logging.info('Booting {} server...'.format(self.config.server))
-        self.config = config
-        self.connect_server()
+	def __init__(self, client_id):
+		self.client_id = client_id
+		
+	def __repr__(self):
+		return 'Client #{}: {} samples in labels: {}'.format(
+			self.client_id, len(self.data), set([label for _, label in self.data]))
+	# Set up client
+	def boot(self, config):
+		# logging.info('Booting {} server...'.format(self.config.server))
+		self.config = config
+		model_path = self.config.paths.model
+		# Add fl_model to import path
+		sys.path.append(model_path)
+		self.connect_server()
 
 # TCP/IP connect to server
-    def connect_server(self):
-        server_ip = self.config.server.socket.get('ip')
-        server_port = self.config.server.socket.get('port')
-        self.server_addr = (server_ip,server_port)
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        logging.info('Connecting to server')
-        self.client_socket.connect(self.server_addr)
-        logging.info('Server connected')
-        self.send_data(self.client_socket, 'ID', self.client_id)
-        
+	def connect_server(self):
+		server_ip = self.config.server.socket.get('ip')
+		server_port = self.config.server.socket.get('port')
+		self.server_addr = (server_ip,server_port)
+		signal(SIGPIPE, SIG_DFL)
+		self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		logging.info('Connecting to server')
+		self.client_socket.connect(self.server_addr)
+		logging.info('Server connected')
+		self.send_data(self.client_socket, 'ID', self.client_id)
+		
 
-    # Set non-IID data configurations
-    def set_bias(self, pref, bias):
-        self.pref = pref
-        self.bias = bias
+	# Set non-IID data configurations
+	def set_bias(self, pref, bias):
+		self.pref = pref
+		self.bias = bias
 
-    def set_shard(self, shard):
-        self.shard = shard
-    def set_socket(self, client_socket):
-        self.client_socket = client_socket
-        
-    # # Server interactions
-    # def download(self, argv):
-    #     # Download from the server.
-    #     if self.socket_state == False:
-    #         try:
-    #             return argv.copy()
-    #         except:
-    #             return argv
-    #     # else:
-            
+	def set_shard(self, shard):
+		self.shard = shard
+	def set_socket(self, client_socket):
+		self.client_socket = client_socket
 
-    # def upload(self, argv):
-    #     # Upload to the server
-    #     try:
-    #         return argv.copy()
-    #     except:
-    #         return argv
+	# Federated learning phases
+	def set_data(self, data):
+		# Extract from config
+		do_test = self.do_test = self.config.clients.do_test
+		test_partition = self.test_partition = self.config.clients.test_partition
 
-    # Federated learning phases
-    def set_data(self, data):
-        # Extract from config
-        do_test = self.do_test = self.config.clients.do_test
-        test_partition = self.test_partition = self.config.clients.test_partition
+		# Download data
+		self.data = data
+		# cmd, self.data = self.recv_data()
 
-        # Download data
-        self.data = data
-        # cmd, self.data = self.recv_data()
+		# Extract trainset, testset (if applicable)
+		if do_test:  # Partition for testset if applicable
+			self.trainset = data[:int(len(data) * (1 - test_partition))]
+			self.testset = data[int(len(data) * (1 - test_partition)):]
+		else:
+			self.trainset = data
 
-        # Extract trainset, testset (if applicable)
-        if do_test:  # Partition for testset if applicable
-            self.trainset = data[:int(len(data) * (1 - test_partition))]
-            self.testset = data[int(len(data) * (1 - test_partition)):]
-        else:
-            self.trainset = data
+	def configure(self, model):
+		import fl_model  # pylint: disable=import-error
 
-    def configure(self, model):
-        import fl_model  # pylint: disable=import-error
+		# Extract from config
+		model_path = self.model_path = self.config.paths.model
 
-        # Extract from config
-        model_path = self.model_path = self.config.paths.model
+		# Download from server
 
-        # Download from server
+		# Extract machine learning task from config
+		self.task = self.config.fl.task
+		self.epochs = self.config.fl.epochs
+		self.batch_size = self.config.fl.batch_size
 
-        # Extract machine learning task from config
-        self.task = self.config.fl.task
-        self.epochs = self.config.fl.epochs
-        self.batch_size = self.config.fl.batch_size
+		# Download most recent global model
+		# path = model_path + '/global'
+		self.model = model
+		# self.model.load_state_dict(torch.load(path))
+		self.model.eval()
 
-        # Download most recent global model
-        path = model_path + '/global'
-        self.model = model
-        self.model.load_state_dict(torch.load(path))
-        self.model.eval()
+		# Create optimizer
+		self.optimizer = fl_model.get_optimizer(self.model)
 
-        # Create optimizer
-        self.optimizer = fl_model.get_optimizer(self.model)
+	def run(self):
+		while True:
+			cmd, data = self.recv_data()
+			if cmd == 'CONFIG':
+				self.set_data(data)
+				logging.info('Received configuration')
+			elif cmd == 'MODEL':
+				logging.info('Received model')
+				self.configure(data)
+				{
+					"train": self.train()
+				}[self.task]
+			elif cmd == 'INFO':
+				logging.info('{}'.format(data))
+				
+		# Perform federated learning task
+		{
+			"train": self.train()
+		}[self.task]
 
-    def run(self):
-        while True:
-            cmd, data = self.recv_data()
-            if cmd == 'CONFIG':
-                self.set_data(data)
-            elif cmd == 'MODEL':
-                self.configure(data)
-                {
-                    "train": self.train()
-                }[self.task]
-        # Perform federated learning task
-        {
-            "train": self.train()
-        }[self.task]
+	# def get_report(self):
+	#     # Report results to server.
+	#     return self.upload(self.report)
 
-    # def get_report(self):
-    #     # Report results to server.
-    #     return self.upload(self.report)
+	# Machine learning tasks
+	def train(self):
+		import fl_model  # pylint: disable=import-error
 
-    # Machine learning tasks
-    def train(self):
-        import fl_model  # pylint: disable=import-error
+		logging.info('Training on client #{}'.format(self.client_id))
 
-        logging.info('Training on client #{}'.format(self.client_id))
+		# Perform model training
+		trainloader = fl_model.get_trainloader(self.trainset, self.batch_size)
+		fl_model.train(self.model, trainloader,
+					   self.optimizer, self.epochs)
+		logging.info('Client {} completed'.format(self.client_id))
+		# Extract model weights and biases
+		weights = fl_model.extract_weights(self.model)
+		
+		# Generate report for server
+		self.report = Report(self.client_id, len(self.data))
+		self.report.weights = weights
+		# Perform model testing if applicable
+		if self.do_test:
+			testloader = fl_model.get_testloader(self.testset, 1000)
+			self.report.accuracy = fl_model.test(self.model, testloader)
+		self.send_data(self.client_socket, 'REPORT', self.report)
+		logging.info('Client {} sends report'.format(self.client_id))
 
-        # Perform model training
-        trainloader = fl_model.get_trainloader(self.trainset, self.batch_size)
-        fl_model.train(self.model, trainloader,
-                       self.optimizer, self.epochs)
+	def test(self):
+		# Perform model testing
+		raise NotImplementedError
+	
+	def send_data(self, server, cmd, data):
+		msg = {}
+		msg['CMD'] = cmd
+		msg['DATA'] = data
+		# Convert data to JSON string
+		msg_json = jsonpickle.encode(msg).encode()
+		# data_len = str(len(msg_json)).encode
+		data2send = struct.pack('>I', len(msg_json)) + msg_json
+		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
+		# server.sendall(data_len)
+		server.sendall(data2send)
 
-        # Extract model weights and biases
-        weights = fl_model.extract_weights(self.model)
-        
-        # Generate report for server
-        self.report = Report(self)
-        self.report.weights = weights
-        # Perform model testing if applicable
-        if self.do_test:
-            testloader = fl_model.get_testloader(self.testset, 1000)
-            self.report.accuracy = fl_model.test(self.model, testloader)
-        self.send_data(self.client_socket, 'REPORT', self.report)
+	def recv_data(self):
+		# datalength : 4 bytes
+		raw_data = self.recvall(4)
+		if not raw_data:
+			return None, None
+		msg_len = struct.unpack('>I', raw_data)[0]
+		# logging.info('data len json: {} size:{}'.format(data_len_json,len(data_len_json)))
+		# data_len = json.loads(data_len_json)
+		# data_len = jsonpickle.decode(data_len_json)
+		# logging.info('recv datasize: {}'.format(msg_len))
+		# data is split across multiple recv()
+		msg_json = self.recvall(msg_len)
+		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
+		msg =  jsonpickle.decode(msg_json.decode())
+		cmd = msg['CMD']
+		data = msg['DATA']
+		return cmd, data
 
-    def test(self):
-        # Perform model testing
-        raise NotImplementedError
-    
-    def send_data(self, server, cmd, data):
-        msg = {}
-        msg['CMD'] = cmd
-        msg['DATA'] = data
-        # Convert data to JSON string
-        msg_json = json.dumps(msg)
-        server.sendall(msg_json.encode())
-
-    def recv_data(self):
-        msg_json = self.client_socket.recv(1024).decode()
-        msg = json.loads(msg_json)
-        cmd = msg['CMD']
-        data = msg['DATA']
-        return cmd, data
-
+	#receive all raw data
+	def recvall(self, data_len):
+		data = bytearray()
+		while len(data)<data_len:
+			packet = self.client_socket.recv(data_len - len(data))
+			if not packet:
+				return None
+			data.extend(packet)
+		return data
 
 
 
 
 class Report(object):
-    """Federated learning client report."""
+	"""Federated learning client report."""
 
-    def __init__(self, client):
-        self.client_id = client.client_id
-        self.num_samples = len(client.data)
+	def __init__(self, id = 0, num_sample = 0):
+		self.weights = []
+		self.client_id = id
+		self.num_samples = num_sample
+	
