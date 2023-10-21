@@ -72,3 +72,20 @@ class Config(object):
         params = [config['server'].get(field, defaults[i])
                   for i, field in enumerate(fields)]
         self.server = namedtuple('server', fields)(*params)
+
+        # -- DQN --
+        fields = ['episode', 'max_steps', 'learning_rate', 'gamma', 'epsilon_initial', 
+                  'epsilon_decay', 'epsilon_min', 'memory_size', 'batch_size', 'target_update',
+                  'hidden_layers', 'reward_fun', 'reward_xi', 'rewards_log', 'saved_model', 'trained_model',
+                  'pca_model']
+
+        defaults = (200, 300, 0.01, 0.95, 1.0, 0.95, 0.01, 200, 4, 10, 
+                    [512,512], 'target', 64, 
+                    'output/dqn_trained_rewards.csv',
+                    '/output/dqn_trained_model',
+                    "output/dqn_models/dqn_10-100_model_200.h5",
+                    'output/dqn_models/pca_10_100.pkl'
+                    )
+        params = [config['dqn'].get(field, defaults[i])
+                  for i, field in enumerate(fields)]
+        self.dqn = namedtuple('dqn', fields)(*params)

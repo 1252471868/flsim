@@ -35,7 +35,7 @@ def main():
     fl_client.run()
 
     # Delete global model
-    os.remove(fl_config.paths.model + '/global')
+    # os.remove(fl_config.paths.model + '/global')
 
 
 if __name__ == "__main__":

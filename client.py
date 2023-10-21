@@ -21,6 +21,7 @@ class Client(object):
 
 	def __init__(self, client_id):
 		self.client_id = client_id
+		self.pref = '-1'
 		
 	def __repr__(self):
 		return 'Client #{}: {} samples in labels: {}'.format(
@@ -118,13 +119,17 @@ class Client(object):
 				{
 					"train": self.train()
 				}[self.task]
+			elif cmd == 'END':
+				logging.info('Completed.')
+				self.client_socket.close()
+				break
 			elif cmd == 'INFO':
 				logging.info('{}'.format(data))
 				
 		# Perform federated learning task
-		{
-			"train": self.train()
-		}[self.task]
+		# {
+		# 	"train": self.train()
+		# }[self.task]
 
 	# def get_report(self):
 	#     # Report results to server.
@@ -147,6 +152,7 @@ class Client(object):
 		# Generate report for server
 		self.report = Report(self.client_id, len(self.data))
 		self.report.weights = weights
+		self.report.pref = int(self.pref.split(' - ')[0])
 		# Perform model testing if applicable
 		if self.do_test:
 			testloader = fl_model.get_testloader(self.testset, 1000)

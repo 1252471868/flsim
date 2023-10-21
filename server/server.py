@@ -223,6 +223,10 @@ class Server(object):
 			with open(reports_path, 'wb') as f:
 				pickle.dump(self.saved_reports, f)
 			logging.info('Saved reports: {}'.format(reports_path))
+		
+		for client in self.clients:
+			self.send_data(client.client_id, 'END', 0)
+		logging.info('Completed')
 
 	def round(self):
 		import fl_model  # pylint: disable=import-error

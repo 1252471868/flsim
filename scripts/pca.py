@@ -7,14 +7,14 @@ import pickle
 from sklearn.decomposition import PCA
 import server
 
-
+pca_config = './configs/MNIST/mnist_pca.json'
 # Set logging
 logging.basicConfig(
     format='[%(levelname)s][%(asctime)s]: %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
 
 # Set up parser
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', type=str, default='./config.json',
+parser.add_argument('-c', '--config', type=str, default=pca_config,
                     help='Configuration file for server.')
 parser.add_argument('-o', '--output', type=str, default='./output.pkl',
                     help='Output pickle file')

@@ -1,6 +1,6 @@
 {
     "clients": {
-        "total": 1,
+        "total": 2,
         "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
@@ -9,7 +9,7 @@
     "data": {
         "loading": "dynamic",
         "partition": {
-            "size": 600,
+            "size": 300,
             "range": [
                 50,
                 200
@@ -22,7 +22,7 @@
         "target_accuracy": 0.95,
         "task": "train",
         "epochs": 5,
-        "batch_size": 10
+        "batch_size": 4
     },
     "model": "MNIST",
     "paths": {
