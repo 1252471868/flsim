@@ -7,6 +7,8 @@ import json
 import sys
 from threading import Lock
 import jsonpickle
+import pickle
+import dill
 import random
 from signal import signal, SIGPIPE, SIG_DFL
 import utils.dists as dists  # pylint: disable=no-name-in-module
@@ -26,7 +28,7 @@ class Client(object):
 	# Set up client
 	def boot(self, config):
 		# logging.info('Booting {} server...'.format(self.config.server))
-		self.config = config
+		self.set_config(config)
 		model_path = self.config.paths.model
 		# Add fl_model to import path
 		sys.path.append(model_path)
@@ -55,22 +57,26 @@ class Client(object):
 	def set_socket(self, client_socket):
 		self.client_socket = client_socket
 
+	def set_config(self, config):
+		self.config = config
 	# Federated learning phases
 	def set_data(self, data):
 		# Extract from config
 		do_test = self.do_test = self.config.clients.do_test
 		test_partition = self.test_partition = self.config.clients.test_partition
-
 		# Download data
 		self.data = data
 		# cmd, self.data = self.recv_data()
-
 		# Extract trainset, testset (if applicable)
 		if do_test:  # Partition for testset if applicable
 			self.trainset = data[:int(len(data) * (1 - test_partition))]
 			self.testset = data[int(len(data) * (1 - test_partition)):]
 		else:
 			self.trainset = data
+
+	def set_testset(self, testset):
+		self.do_test = True
+		self.testset = testset
 
 	def configure(self, model):
 		import fl_model  # pylint: disable=import-error
@@ -98,8 +104,14 @@ class Client(object):
 		while True:
 			cmd, data = self.recv_data()
 			if cmd == 'CONFIG':
-				self.set_data(data)
+				self.set_config(data)
 				logging.info('Received configuration')
+			elif cmd == 'DATA':
+				self.set_data(data)
+				logging.info('Received data')
+			elif cmd == 'TESTSET':
+				self.set_testset(data)
+				logging.info('Received testset')
 			elif cmd == 'MODEL':
 				logging.info('Received model')
 				self.configure(data)
@@ -151,9 +163,10 @@ class Client(object):
 		msg['CMD'] = cmd
 		msg['DATA'] = data
 		# Convert data to JSON string
-		msg_json = jsonpickle.encode(msg).encode()
+		msg_string = dill.dumps(msg)
+		# msg_json = jsonpickle.encode(msg).encode()
 		# data_len = str(len(msg_json)).encode
-		data2send = struct.pack('>I', len(msg_json)) + msg_json
+		data2send = struct.pack('>I', len(msg_string)) + msg_string
 		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
 		# server.sendall(data_len)
 		server.sendall(data2send)
@@ -169,9 +182,9 @@ class Client(object):
 		# data_len = jsonpickle.decode(data_len_json)
 		# logging.info('recv datasize: {}'.format(msg_len))
 		# data is split across multiple recv()
-		msg_json = self.recvall(msg_len)
+		msg_string = self.recvall(msg_len)
 		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
-		msg =  jsonpickle.decode(msg_json.decode())
+		msg = dill.loads(msg_string)
 		cmd = msg['CMD']
 		data = msg['DATA']
 		return cmd, data

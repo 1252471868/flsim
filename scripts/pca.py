@@ -20,7 +20,8 @@ parser.add_argument('-o', '--output', type=str, default='./output.pkl',
                     help='Output pickle file')
 
 args = parser.parse_args()
-
+case_name = args.config.split('/')[-1].split('.')[0]
+print("case_name:", case_name)
 
 def main():
     """Extract PCA vectors from FL clients."""
@@ -29,16 +30,19 @@ def main():
     fl_config = config.Config(args.config)
 
     # Initialize server
-    fl_server = server.KMeansServer(fl_config)
+    fl_server = server.KMeansServer(fl_config, case_name)
     fl_server.boot()
 
     # Run client profiling
     fl_server.profile_clients()
 
+
     # Extract clients, reports, weights
     clients = [client for client in group for group in [
         fl_server.clients[profile] for profile in fl_server.clients.keys()]]
-    reports = [client.get_report() for client in clients]
+    
+    reports = fl_server.reporting(clients)
+    # reports = [client.get_report() for client in clients]
     weights = [report.weights for report in reports]
 
     # Flatten weights

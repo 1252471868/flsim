@@ -5,10 +5,11 @@ import logging
 import os
 import server
 
-
+server_config = './configs/MNIST/mnist_kcenter_noniid.json'
+# server_config = './config.json'
 # Set up parser
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', type=str, default='./config.json',
+parser.add_argument('-c', '--config', type=str, default=server_config,
                     help='Federated learning configuration file.')
 # parser.add_argument('-c', '--config', type=str, default='./configs/MNIST/mnist.json',
 #                     help='Federated learning configuration file.')
@@ -16,6 +17,8 @@ parser.add_argument('-l', '--log', type=str, default='INFO',
                     help='Log messages level.')
 
 args = parser.parse_args()
+case_name = args.config.split('/')[-1].split('.')[0]
+print("case_name:", case_name)
 
 # Set logging
 logging.basicConfig(
@@ -30,12 +33,12 @@ def main():
 
     # Initialize server
     fl_server = {
-        "basic": server.Server(fl_config),
-        "accavg": server.AccAvgServer(fl_config),
-        "directed": server.DirectedServer(fl_config),
-        "kcenter": server.KCenterServer(fl_config),
-        "kmeans": server.KMeansServer(fl_config),
-        "magavg": server.MagAvgServer(fl_config),
+        "basic": server.Server(fl_config, case_name),
+        "accavg": server.AccAvgServer(fl_config, case_name),
+        "directed": server.DirectedServer(fl_config, case_name),
+        "kcenter": server.KCenterServer(fl_config, case_name),
+        "kmeans": server.KMeansServer(fl_config, case_name),
+        "magavg": server.MagAvgServer(fl_config, case_name),
         # "dqn": server.DQNServer(fl_config), # DQN server disabled
         # "dqntrain": server.DQNTrainServer(fl_config), # DQN server disabled
     }[fl_config.server.type]

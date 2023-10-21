@@ -47,5 +47,10 @@ class AccAvgServer(Server):
         super().set_client_data(client)
 
         # Send each client a testing partition
-        client.testset = client.download(self.loader.get_testset())
-        client.do_test = True  # Tell client to perform testing
+        # client.testset = client.download(self.loader.get_testset())
+        # client.do_test = True  # Tell client to perform testing
+        self.set_client_testset(client)
+    
+    def set_client_testset(self, client):
+        testset = self.loader.get_testset()
+        super().send_data(client.client_id, 'TESTSET', testset)

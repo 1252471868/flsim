@@ -12,6 +12,7 @@ import socket
 import socketserver
 import json
 import jsonpickle
+import dill
 from signal import signal, SIGPIPE, SIG_DFL
 import struct
 
@@ -58,8 +59,9 @@ clients_list = ClientList()
 class Server(object):
 	"""Basic federated learning server."""
 
-	def __init__(self, config):
+	def __init__(self, config, case_name):
 		self.config = config
+		self.case_name = case_name
 
 	# Set up server
 	def boot(self):
@@ -124,7 +126,7 @@ class Server(object):
 			self.save_reports(0, [])  # Save initial model
 
 	def msg_handler(self, server_ip,server_port):
-		logging.info('Server start, waiting for connecting')
+		logging.info('Server started, waiting for connecting')
 		socketserver.TCPServer.allow_reuse_address = True
 		s=socketserver.ThreadingTCPServer((server_ip,server_port), TCPServerHandler)
 		s.serve_forever()
@@ -198,6 +200,9 @@ class Server(object):
 				rounds, 100 * target_accuracy))
 		else:
 			logging.info('Training: {} rounds\n'.format(rounds))
+			
+		with open('output/'+self.case_name+'.csv', 'w') as f:
+			f.write('round,accuracy\n')
 
 		# Perform rounds of federated learning
 		for round in range(1, rounds + 1):
@@ -205,6 +210,9 @@ class Server(object):
 
 			# Run the federated learning round
 			accuracy = self.round()
+			
+			with open('output/'+self.case_name+'.csv', 'a') as f:
+				f.write('{},{:.4f}'.format(round, accuracy*100)+'\n')
 
 			# Break loop when target accuracy is met
 			if target_accuracy and (accuracy >= target_accuracy):
@@ -254,6 +262,7 @@ class Server(object):
 		if self.config.clients.do_test:  # Get average accuracy from client reports
 			accuracy = self.accuracy_averaging(reports)
 		else:  # Test updated model on server
+			logging.info('Testing...')
 			testset = self.loader.get_testset()
 			batch_size = self.config.fl.batch_size
 			testloader = fl_model.get_testloader(testset, batch_size)
@@ -384,7 +393,6 @@ class Server(object):
 
 	def set_client_data(self, client):
 		loader = self.config.loader
-
 		# Get data partition size
 		if loader != 'shard':
 			if self.config.data.partition.get('size'):
@@ -392,7 +400,6 @@ class Server(object):
 			elif self.config.data.partition.get('range'):
 				start, stop = self.config.data.partition.get('range')
 				partition_size = random.randint(start, stop)
-
 		# Extract data partition for client
 		if loader == 'basic':
 			data = self.loader.get_partition(partition_size)
@@ -402,11 +409,13 @@ class Server(object):
 			data = self.loader.get_partition()
 		else:
 			logging.critical('Unknown data loader type')
-
 		# Send data to client
-		
-		self.send_data(client.client_id, 'CONFIG', data)
+		self.send_data(client.client_id, 'CONFIG', self.config)
+		self.send_data(client.client_id, 'DATA', data)
 		# client.set_data(data, self.config)
+
+	def set_client_config(self, client):		
+		self.send_data(client.client_id, 'CONFIG', self.config)
 
 	def save_model(self, model, path):
 		path += '/global'
@@ -429,13 +438,17 @@ class Server(object):
 		msg['CMD'] = cmd
 		msg['DATA'] = data
 		# Convert data to JSON string
-		msg_json = jsonpickle.encode(msg).encode()
+		msg_string = dill.dumps(msg)
+		# msg_json = jsonpickle.encode(msg).encode()
 		# data_len = str(len(msg_json)).encode
-		data2send = struct.pack('>I', len(msg_json)) + msg_json
+		data2send = struct.pack('>I', len(msg_string)) + msg_string
 		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
 		client_socket = clients_list.get_socket(client_id)
 		# server.sendall(data_len)
 		client_socket.sendall(data2send)
+	
+	def get_clientlist(self):
+		return clients_list
 
 class TCPServerHandler(socketserver.BaseRequestHandler):
 	def handle(self):
@@ -453,7 +466,7 @@ class TCPServerHandler(socketserver.BaseRequestHandler):
 					client_id = clients_list.get_id(self.request)
 					clients_list.set_report(client_id, report)
 					clients_list.set_report_state(client_id)
-					logging.info('Receive report from client {} '.format(self.client_address))
+					logging.info('Received report from client {} '.format(client_id))
 				if cmd == 'INFO':
 					logging.info('{}'.format(data))
 				
@@ -474,9 +487,10 @@ class TCPServerHandler(socketserver.BaseRequestHandler):
 		# data_len = jsonpickle.decode(data_len_json)
 		# logging.info('recv datasize: {}'.format(msg_len))
 		# data is split across multiple recv()
-		msg_json = self.recvall(msg_len)
+		msg_string = self.recvall(msg_len)
 		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
-		msg =  jsonpickle.decode(msg_json.decode())
+		msg = dill.loads(msg_string)
+		# msg =  jsonpickle.decode(msg_json.decode())
 		cmd = msg['CMD']
 		data = msg['DATA']
 		return cmd, data

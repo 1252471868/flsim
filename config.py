@@ -17,16 +17,21 @@ class Config(object):
         config = self.config
 
         # -- Clients --
+        '''
+        label_distribution: uniform, normal
+        '''
         fields = ['total', 'per_round', 'label_distribution',
                   'do_test', 'test_partition','socket']
         defaults = (0, 0, 'uniform', False, None, None)
         params = [config['clients'].get(field, defaults[i])
                   for i, field in enumerate(fields)]
         self.clients = namedtuple('clients', fields)(*params)
-
         assert self.clients.per_round <= self.clients.total
 
         # -- Data --
+        '''
+        loading: static, dynamic
+        '''
         fields = ['loading', 'partition', 'IID', 'bias', 'shard']
         defaults = ('static', 0, True, None, None)
         params = [config['data'].get(field, defaults[i])

@@ -99,6 +99,8 @@ def train(model, trainloader, optimizer, epochs):
             if batch_id % log_interval == 0:
                 logging.debug('Epoch: [{}/{}]\tLoss: {:.6f}'.format(
                     epoch, epochs, loss.item()))
+            del image, label, output, loss
+            torch.cuda.empty_cache()
 
 
 def test(model, testloader):
