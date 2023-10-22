@@ -12,7 +12,7 @@ with open("output/clients_prefs.pkl", 'rb') as b:
 x1 = data_weight1[:,0]
 y1 = data_weight1[:,1]
 l1 = data_label1
-total1 = np.zeros((3,100))
+total1 = np.zeros((3,2))
 total1[0] = l1
 total1[1] = x1
 total1[2] = y1
@@ -31,7 +31,7 @@ plt.title('PCA on the MNIST dataset(1 client)')
 plt.xlabel('C0')
 plt.ylabel('C1')
 
-plt.savefig("../output/100_clients_pca.png")
+plt.savefig("output/clients_pca.png")
 
 
 plt.show()

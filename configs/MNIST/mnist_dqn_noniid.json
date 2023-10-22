@@ -9,7 +9,7 @@
     "data": {
         "loading": "dynamic",
         "partition": {
-            "size": 300,
+            "size": 200,
             "range": [
                 50,
                 200
@@ -42,9 +42,9 @@
         }
     },
     "dqn": {
-        "episode": 150,
-        "max_steps": 30,
-        "learning_rate": 0.0001,
+        "episode": 100,
+        "max_steps": 10,
+        "learning_rate": 0.001,
         "gamma": 0.95,
         "epsilon_initial": 1.0,
         "epsilon_decay": 0.95,
@@ -52,7 +52,7 @@
         "memory_size": 200,
         "batch_size": 4,
         "target_update": 10,
-        "hidden_layers": [256, 256],
+        "hidden_layers": [128, 128],
         "reward_xi": 64,
         "rewards_log": "output/dqn_model_rewards.csv",
         "saved_model": "output/dqn_models/dqn_model",
