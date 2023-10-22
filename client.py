@@ -22,7 +22,7 @@ class Client(object):
 	def __init__(self, client_id):
 		self.client_id = client_id
 		self.pref = '-1'
-		
+
 	def __repr__(self):
 		return 'Client #{}: {} samples in labels: {}'.format(
 			self.client_id, len(self.data), set([label for _, label in self.data]))
@@ -104,6 +104,11 @@ class Client(object):
 	def run(self):
 		while True:
 			cmd, data = self.recv_data()
+			if cmd == 'BIAS':
+				pref = data[0]
+				bias = data[1]
+				self.set_bias(pref, bias)
+				logging.info('Received bias')
 			if cmd == 'CONFIG':
 				self.set_config(data)
 				logging.info('Received configuration')
@@ -125,6 +130,7 @@ class Client(object):
 				break
 			elif cmd == 'INFO':
 				logging.info('{}'.format(data))
+			
 				
 		# Perform federated learning task
 		# {
@@ -183,11 +189,6 @@ class Client(object):
 		if not raw_data:
 			return None, None
 		msg_len = struct.unpack('>I', raw_data)[0]
-		# logging.info('data len json: {} size:{}'.format(data_len_json,len(data_len_json)))
-		# data_len = json.loads(data_len_json)
-		# data_len = jsonpickle.decode(data_len_json)
-		# logging.info('recv datasize: {}'.format(msg_len))
-		# data is split across multiple recv()
 		msg_string = self.recvall(msg_len)
 		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
 		msg = dill.loads(msg_string)

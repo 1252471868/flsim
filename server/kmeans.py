@@ -78,7 +78,7 @@ class KMeansServer(Server):
 		weight_vecs = self.model_weights(clients)
 
 		# Use the number of clusters as there are labels
-		n_clusters = len(self.loader.labels)
+		n_clusters = min(len(self.loader.labels), self.config.clients.total)
 
 		logging.info('KMeans: {} clients, {} clusters'.format(
 			len(weight_vecs), n_clusters))
@@ -94,7 +94,7 @@ class KMeansServer(Server):
 
 		# Group clients by profile
 		grouped_clients = {cluster: [] for cluster in
-						   range(len(self.loader.labels))}
+						   range(min(len(self.loader.labels), self.config.clients.total))}
 		for i, client in enumerate(self.clients):
 			grouped_clients[kmeans[i]].append(client)
 

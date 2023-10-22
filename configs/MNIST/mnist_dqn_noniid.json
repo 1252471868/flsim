@@ -1,6 +1,6 @@
 {
     "clients": {
-        "total": 1,
+        "total": 2,
         "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
@@ -22,8 +22,8 @@
         }
     },
     "federated_learning": {
-        "rounds": 200,
-        "target_accuracy": 0.95,
+        "rounds": 100,
+        "target_accuracy": 0.99,
         "task": "train",
         "epochs": 5,
         "batch_size": 4
@@ -42,8 +42,8 @@
         }
     },
     "dqn": {
-        "episode": 200,
-        "max_steps": 50,
+        "episode": 150,
+        "max_steps": 30,
         "learning_rate": 0.0001,
         "gamma": 0.95,
         "epsilon_initial": 1.0,

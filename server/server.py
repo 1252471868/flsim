@@ -60,6 +60,7 @@ class Server(object):
 	"""Basic federated learning server."""
 
 	def __init__(self, config, case_name):
+		self.seed()
 		self.config = config
 		self.case_name = case_name
 
@@ -78,6 +79,9 @@ class Server(object):
 		self.load_model()
 		self.connect_clients(client_cfg)
 
+	def seed(self, seed1=123, seed2=1234):
+		np.random.seed(seed1)
+		random.seed(seed2)
 
 	def load_data(self):
 		import fl_model  # pylint: disable=import-error
@@ -141,6 +145,9 @@ class Server(object):
 		server_port = self.config.server.socket.get('port')
 		msg_thread = Thread(target=self.msg_handler, args=(server_ip,server_port,))
 		msg_thread.start()
+		#Wait for connection
+		while len(clients_list.id_list) < client_cfg.total :
+			pass
  # Make simulated clients
 		if not IID:  # Create distribution for label preferences if non-IID
 			dist = {
@@ -161,7 +168,8 @@ class Server(object):
 					pref = random.choices(labels, dist)[0]
 
 					# Assign preference, bias config
-					new_client.set_bias(pref, bias)
+					self.set_client_bias(new_client, pref, bias)
+					# new_client.set_bias(pref, bias)
 				elif self.config.data.shard:
 					# Shard data partitions
 					shard = self.config.data.shard
@@ -176,9 +184,7 @@ class Server(object):
 				[[client.pref for client in clients].count(label) for label in labels]))
 
 
-		#Wait for connection
-		while len(clients_list.id_list) < client_cfg.total :
-			pass
+
 		self.send_data(0,'INFO','test')
 		# self.send_data(1,'INFO','test')
 		if loading == 'static':
@@ -234,6 +240,7 @@ class Server(object):
 		# Select clients to participate in the round
 		sample_clients = self.selection()
 		sample_clients_id = [client.client_id for client in sample_clients]
+		logging.info("select clients: {}".format(sample_clients_id))
 		# Configure sample clients
 		self.configuration(sample_clients)
 
@@ -417,6 +424,10 @@ class Server(object):
 		self.send_data(client.client_id, 'CONFIG', self.config)
 		self.send_data(client.client_id, 'DATA', data)
 		# client.set_data(data, self.config)
+
+	def set_client_bias(self, client, pref, bias):
+		client.set_bias(pref, bias)
+		self.send_data(client.client_id, 'BIAS', (pref, bias))
 
 	def set_client_config(self, client):		
 		self.send_data(client.client_id, 'CONFIG', self.config)

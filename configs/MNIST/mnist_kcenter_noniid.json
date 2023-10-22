@@ -22,7 +22,7 @@
         }
     },
     "federated_learning": {
-        "rounds": 200,
+        "rounds": 100,
         "target_accuracy": 0.95,
         "task": "train",
         "epochs": 5,
@@ -40,5 +40,6 @@
             "ip": "10.0.0.13",
             "port":5000
         }
-    }
+    },
+    "dqn": {}
 }

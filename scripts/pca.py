@@ -1,11 +1,12 @@
 import argparse
-import client
 import config
 import logging
 import os
-import pickle
+import pickle as pk
 from sklearn.decomposition import PCA
 import server
+import time
+import numpy as np
 
 pca_config = './configs/MNIST/mnist_pca.json'
 # Set logging
@@ -36,31 +37,56 @@ def main():
     # Run client profiling
     fl_server.profile_clients()
 
-
+    # group = [fl_server.clients[profile] for profile in fl_server.clients.keys()]
     # Extract clients, reports, weights
-    clients = [client for client in group for group in [
-        fl_server.clients[profile] for profile in fl_server.clients.keys()]]
+    # clients = [client for client in group]
+    clients = [client for profile in fl_server.clients.keys() for client in fl_server.clients[profile]] 
     
     reports = fl_server.reporting(clients)
     # reports = [client.get_report() for client in clients]
     weights = [report.weights for report in reports]
 
-    # Flatten weights
-    def flatten_weights(weights):
-        weight_vecs = []
-        for _, weight in weights:
-            weight_vecs.extend(weight.flatten())
-        return weight_vecs
+    clients_weights = [fl_server.flatten_weights(report.weights) for report in reports] # list of numpy arrays
+    clients_weights = np.array(clients_weights) # convert to numpy array
+    clients_prefs = [report.pref for report in reports] # dominant class in each client
 
-    logging.info('Flattening weights...')
-    weight_vecs = [flatten_weights(weight) for weight in weights]
+    t_start = time.time()
+    print("Start building the PCA transformer...")
+    pca_n_components = fl_config.clients.total
+    pca = PCA(n_components=pca_n_components)
+    #self.pca = PCA(n_components=2)
+    clients_weights_pca = pca.fit_transform(clients_weights)
 
-    # Perform PCA on weight vectors
-    logging.info('Assembling output...')
-    output = [(clients[i].client_id, clients[i].pref, weight) for i, weight in enumerate(weight_vecs)]
-    logging.info('Writing output to binary...')
-    with open(args.output, 'wb') as f:
-        pickle.dump(output, f)
+    # dump clients_weights_pca out to pkl file for plotting
+    clients_weights_pca_fn = 'output/clients_weights_pca.pkl'
+    pk.dump(clients_weights_pca, open(clients_weights_pca_fn,"wb"))
+    print("clients_weights_pca dumped to", clients_weights_pca_fn)    
+
+    # dump clients_prefs
+    clients_prefs_fn = 'output/clients_prefs.pkl'
+    pk.dump(clients_prefs, open(clients_prefs_fn,"wb"))
+    print("clients_prefs dumped to", clients_prefs_fn)        
+
+    t_end = time.time()
+    print("Built PCA transformer, time: {:.2f} s".format(t_end - t_start))
+
+
+    # # Flatten weights
+    # def flatten_weights(weights):
+    #     weight_vecs = []
+    #     for _, weight in weights:
+    #         weight_vecs.extend(weight.flatten())
+    #     return weight_vecs
+
+    # logging.info('Flattening weights...')
+    # weight_vecs = [flatten_weights(weight) for weight in weights]
+
+    # # Perform PCA on weight vectors
+    # logging.info('Assembling output...')
+    # output = [(clients[i].client_id, clients[i].pref, weight) for i, weight in enumerate(weight_vecs)]
+    # logging.info('Writing output to binary...')
+    # with open(args.output, 'wb') as f:
+    #     pickle.dump(output, f)
 
     logging.info('Done!')
 
