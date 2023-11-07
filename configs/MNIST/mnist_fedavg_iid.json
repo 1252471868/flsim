@@ -1,6 +1,6 @@
 {
     "clients": {
-        "total": 2,
+        "total": 1,
         "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
@@ -33,7 +33,7 @@
     "server": {
         "type":"basic",
         "socket": {
-            "ip": "10.0.0.17",
+            "ip": "192.168.1.12",
             "port":5000
         }
     },

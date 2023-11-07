@@ -4,8 +4,9 @@ import config
 import logging
 import os
 import server
+import time
 
-server_config = './configs/MNIST/mnist_kcenter_noniid.json'
+server_config = './configs/MNIST/mnist_fedavg_noniid.json'
 # server_config = './config.json'
 # Set up parser
 parser = argparse.ArgumentParser()
@@ -45,8 +46,10 @@ def main():
     fl_server.boot()
 
     # Run federated learning
+    t_start = time.time()
     fl_server.run()
-
+    t_end = time.time()
+    logging.info('Running time: {}'.format(t_end-t_start))
     # Delete global model
     os.remove(fl_config.paths.model + '/global')
 

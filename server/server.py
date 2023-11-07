@@ -60,14 +60,13 @@ class Server(object):
 	"""Basic federated learning server."""
 
 	def __init__(self, config, case_name):
-		self.seed()
 		self.config = config
 		self.case_name = case_name
 
 	# Set up server
 	def boot(self):
 		logging.info('Booting {} server...'.format(self.config.server))
-
+		self.seed()
 		model_path = self.config.paths.model
 		client_cfg = self.config.clients
 
@@ -79,9 +78,13 @@ class Server(object):
 		self.load_model()
 		self.connect_clients(client_cfg)
 
-	def seed(self, seed1=123, seed2=1234):
-		np.random.seed(seed1)
-		random.seed(seed2)
+	def seed(self, seed=123):
+		torch.manual_seed(seed)
+		torch.cuda.manual_seed_all(seed)
+		np.random.seed(seed)
+		random.seed(seed)
+		torch.backends.cudnn.deterministic = True
+
 
 	def load_data(self):
 		import fl_model  # pylint: disable=import-error
@@ -232,7 +235,7 @@ class Server(object):
 		
 		for client in self.clients:
 			self.send_data(client.client_id, 'END', 0)
-		logging.info('Completed')
+		logging.info('*******************Completed*********************')
 
 	def round(self):
 		import fl_model  # pylint: disable=import-error
@@ -247,6 +250,7 @@ class Server(object):
 		# Wait for reports
 		while not all(clients_list.get_report_state(sample_clients_id)):
 			pass
+		clients_list.clear_report_state()
 		# Run clients using multithreading for better parallelism
 		# threads = [Thread(target=client.run) for client in sample_clients]
 		# [t.start() for t in threads]

@@ -6,6 +6,7 @@ import socket
 import json
 import sys
 from threading import Lock
+import numpy as np
 import jsonpickle
 import pickle
 import dill
@@ -29,12 +30,20 @@ class Client(object):
 	# Set up client
 	def boot(self, config):
 		# logging.info('Booting {} server...'.format(self.config.server))
+		self.seed()
 		self.set_config(config)
 		model_path = self.config.paths.model
 		# Add fl_model to import path
 		sys.path.append(model_path)
+  
 		self.connect_server()
 
+	def seed(self, seed=123):
+		torch.manual_seed(seed)
+		torch.cuda.manual_seed_all(seed)
+		np.random.seed(seed)
+		random.seed(seed)
+		torch.backends.cudnn.deterministic = True
 # TCP/IP connect to server
 	def connect_server(self):
 		server_ip = self.config.server.socket.get('ip')
