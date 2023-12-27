@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import sys
 import torchvision
+import numpy as np
 
 
 
@@ -31,6 +32,15 @@ inputs = torch.tensor([[1.0], [2.0], [3.0], [4.0]]).to(device)
 
 # 在多个GPU上进行并行计算
 outputs = model(inputs)
+
+a = np.ones(10)
+b = np.array(a)
+c = range(10)
+d = np.asarray([0])
+# h = [0]
+print(type(d))
+ind = np.arange(100,len(d),100)
+e = np.array_split(d, ind)
 
 # 打印计算结果
 print(outputs)

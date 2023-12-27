@@ -51,7 +51,7 @@ def main():
     t_end = time.time()
     logging.info('Running time: {}'.format(t_end-t_start))
     # Delete global model
-    os.remove(fl_config.paths.model + '/global')
+    # os.remove(fl_config.paths.model + '/global')
 
 
 if __name__ == "__main__":

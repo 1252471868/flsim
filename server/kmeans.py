@@ -55,7 +55,7 @@ class KMeansServer(Server):
 		# Wait for reports
 		while not all(super().get_clientlist().get_report_state(sample_clients_id)):
 			pass
-		  
+		super().get_clientlist().clear_report_state()
 		# threads = [Thread(target=client.train) for client in self.clients]
 		# [t.start() for t in threads]
 		# [t.join() for t in threads]

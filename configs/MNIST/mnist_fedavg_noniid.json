@@ -9,7 +9,7 @@
     "data": {
         "loading": "dynamic",
         "partition": {
-            "size": 300,
+            "size": 600,
             "range": [
                 50,
                 200
@@ -22,8 +22,8 @@
         }
     },
     "federated_learning": {
-        "rounds": 100,
-        "target_accuracy": 0.95,
+        "rounds": 200,
+        "target_accuracy": 0.98,
         "task": "train",
         "epochs": 5,
         "batch_size": 4
@@ -38,7 +38,8 @@
         "type":"basic",
         "socket": {
             "ip": "192.168.1.12",
-            "port":5000
+            "port":5050,
+            "protocol": "udp"
         }
     },
     "dqn": {}

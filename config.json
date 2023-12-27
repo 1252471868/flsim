@@ -1,13 +1,13 @@
 {
     "clients": {
-        "total": 1,
+        "total": 2,
         "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
         "test_partition": 0.2     
     },
     "data": {
-        "loading": "dynamic",
+        "loading": "static",
         "partition": {
             "size": 600,
             "range": [
@@ -38,7 +38,8 @@
         "type":"basic",
         "socket": {
             "ip": "192.168.1.12",
-            "port":5000
+            "port":5050,
+            "protocol":"udp"
         }
     },
     "dqn": {

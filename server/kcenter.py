@@ -72,6 +72,7 @@ class KCenterServer(Server):
 		# Wait for reports
 		while not all(super().get_clientlist().get_report_state(sample_clients_id)):
 			pass
+		super().get_clientlist().clear_report_state()
 		# Recieve client reports
 		reports = self.reporting(clients)
 

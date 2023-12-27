@@ -9,7 +9,7 @@
     "data": {
         "loading": "dynamic",
         "partition": {
-            "size": 300,
+            "size": 600,
             "range": [
                 50,
                 200
@@ -34,7 +34,8 @@
         "type":"basic",
         "socket": {
             "ip": "192.168.1.12",
-            "port":5000
+            "port":5050,
+            "protocol": "tcp"
         }
     },
     "dqn": {}

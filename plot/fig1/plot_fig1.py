@@ -4,16 +4,16 @@ import seaborn as sns
 import numpy as np
 
 # Load data
-df1 = pd.read_csv('output/fig1/mnist_fedavg_noniid.csv')
-df2 = pd.read_csv('output/fig1/mnist_fedavg_iid.csv')
-df3 = pd.read_csv('output/fig1/mnist_kcenter_noniid.csv')
-
+df1 = pd.read_csv('output/fig1/mnist_fedavg_iid.csv')
+df2 = pd.read_csv('output/fig1/mnist_fedavg_noniid_tcp.csv')
+# df3 = pd.read_csv('output/fig1/mnist_kcenter_noniid.csv')
+df3 = pd.read_csv('output/fig1/mnist_fedavg_noniid_udp.csv')
 
 # Plot data using accuracy vs. round
 fig, ax = plt.subplots()
-sns.lineplot(data=df1, x='round', y='accuracy', label='FedAvg (Non-IID)', ax=ax)
-sns.lineplot(data=df2, x='round', y='accuracy', label='FedAvg (IID)', ax=ax)
-sns.lineplot(data=df3, x='round', y='accuracy', label='K-Center (Non-IID)', ax=ax)
+sns.lineplot(data=df1, x='round', y='accuracy', label='FedAvg (IID)', ax=ax)
+sns.lineplot(data=df2, x='round', y='accuracy', label='FedAvg (Non-IID), TCP', ax=ax)
+sns.lineplot(data=df3, x='round', y='accuracy', label='FedAvg (Non-IID), UDP', ax=ax)
 
 ax.set_title('Wireless Communication, Select 1 out of 2 ')
 ax.set_xlabel('Communication Round')

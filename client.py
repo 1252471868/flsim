@@ -12,8 +12,10 @@ import pickle
 import dill
 import random
 from signal import signal, SIGPIPE, SIG_DFL
+from TCPUDP_socket import TensorBuffer, Unflatten_Tensor
 import utils.dists as dists  # pylint: disable=no-name-in-module
 import struct
+import TCPUDP_socket
 
 mutex = Lock()
 
@@ -30,12 +32,13 @@ class Client(object):
 	# Set up client
 	def boot(self, config):
 		# logging.info('Booting {} server...'.format(self.config.server))
-		self.seed()
+		self.seed(123+self.client_id)
 		self.set_config(config)
 		model_path = self.config.paths.model
 		# Add fl_model to import path
 		sys.path.append(model_path)
-  
+		import fl_model
+		self.model = fl_model.Net()
 		self.connect_server()
 
 	def seed(self, seed=123):
@@ -47,14 +50,18 @@ class Client(object):
 # TCP/IP connect to server
 	def connect_server(self):
 		server_ip = self.config.server.socket.get('ip')
-		server_port = self.config.server.socket.get('port')
-		self.server_addr = (server_ip,server_port)
-		signal(SIGPIPE, SIG_DFL)
-		self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		logging.info('Connecting to server')
-		self.client_socket.connect(self.server_addr)
+		# server_port = self.config.server.socket.get('port')
+		# self.server_addr = (server_ip,server_port)
+		# signal(SIGPIPE, SIG_DFL)
+		# self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		# logging.info('Connecting to server')
+		# self.client_socket.connect(self.server_addr)
+		self.socket = TCPUDP_socket.TCPUDPClient(SERVER= server_ip, CLIENT_ID=self.client_id)
 		logging.info('Server connected')
-		self.send_data(self.client_socket, 'ID', self.client_id)
+		# self.socket.send('INFO', msg_udp=[0])
+		self.socket.send('ID', msg_tcp=self.client_id, msg_udp=[self.client_id])
+		
+		# self.send_data(self.client_socket, 'ID', self.client_id)
 		
 
 	# Set non-IID data configurations
@@ -88,7 +95,7 @@ class Client(object):
 		self.do_test = True
 		self.testset = testset
 
-	def configure(self, model):
+	def configure(self, raw_weights):
 		import fl_model  # pylint: disable=import-error
 
 		# Extract from config
@@ -103,8 +110,21 @@ class Client(object):
 
 		# Download most recent global model
 		# path = model_path + '/global'
-		self.model = model
-		# self.model.load_state_dict(torch.load(path))
+		baseline_weights = fl_model.extract_weights_noname(self.model)
+		weights_flattened = TensorBuffer(baseline_weights)
+		if self.config.server.socket.get('protocol') == 'udp':
+			raw_weights = np.concatenate(raw_weights)
+			indices = raw_weights[:, 0]
+			weights = raw_weights[:, 1]
+			weights_flattened.buffer[indices] = torch.from_numpy(weights)
+		elif self.config.server.socket.get('protocol') == 'tcp':
+			weights = raw_weights
+			weights_flattened.buffer[:] = torch.from_numpy(weights)
+		weights_unflattened = Unflatten_Tensor(weights_flattened, self.model)
+		fl_model.load_weights_noname(self.model, weights_unflattened)
+		# self.model = model
+		# self.model=torch.load(model)
+		# self.model.load_state_dict(torch.load(model))
 		self.model.eval()
 
 		# Create optimizer
@@ -112,7 +132,8 @@ class Client(object):
 
 	def run(self):
 		while True:
-			cmd, data = self.recv_data()
+			# cmd, data = self.recv_data()
+			cmd, data = self.socket.receive()
 			if cmd == 'BIAS':
 				pref = data[0]
 				bias = data[1]
@@ -129,13 +150,14 @@ class Client(object):
 				logging.info('Received testset')
 			elif cmd == 'MODEL':
 				logging.info('Received model')
+
 				self.configure(data)
 				{
 					"train": self.train()
 				}[self.task]
 			elif cmd == 'END':
 				logging.info('Completed.')
-				self.client_socket.close()
+				# self.client_socket.close()
 				break
 			elif cmd == 'INFO':
 				logging.info('{}'.format(data))
@@ -162,67 +184,66 @@ class Client(object):
 					   self.optimizer, self.epochs)
 		logging.info('Client {} completed'.format(self.client_id))
 		# Extract model weights and biases
-		weights = fl_model.extract_weights(self.model)
+		weights =fl_model.extract_weights_noname(self.model)
+		weights_flat = TensorBuffer(weights)
 		
 		# Generate report for server
-		self.report = Report(self.client_id, len(self.data))
-		self.report.weights = weights
+		self.report = TCPUDP_socket.Report(self.client_id, len(self.data))
+		# self.report.weights = weights
 		self.report.pref = int(self.pref.split(' - ')[0])
 		# Perform model testing if applicable
 		if self.do_test:
 			testloader = fl_model.get_testloader(self.testset, 1000)
 			self.report.accuracy = fl_model.test(self.model, testloader)
-		self.send_data(self.client_socket, 'REPORT', self.report)
+		if self.config.server.socket.get('protocol') == 'tcp':
+			self.socket.send('REPORT', msg_tcp=(self.report, weights_flat.buffer.numpy()))
+		elif self.config.server.socket.get('protocol') == 'udp':
+			self.socket.send('REPORT', msg_tcp=self.report, msg_udp=weights_flat.buffer.numpy())
+		# self.send_data(self.client_socket, 'REPORT', self.report)
 		logging.info('Client {} sends report'.format(self.client_id))
 
 	def test(self):
 		# Perform model testing
 		raise NotImplementedError
 	
-	def send_data(self, server, cmd, data):
-		msg = {}
-		msg['CMD'] = cmd
-		msg['DATA'] = data
-		# Convert data to JSON string
-		msg_string = dill.dumps(msg)
-		# msg_json = jsonpickle.encode(msg).encode()
-		# data_len = str(len(msg_json)).encode
-		data2send = struct.pack('>I', len(msg_string)) + msg_string
-		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
-		# server.sendall(data_len)
-		server.sendall(data2send)
+	# def send_data(self, server, cmd, data):
+	# 	msg = {}
+	# 	msg['CMD'] = cmd
+	# 	msg['DATA'] = data
+	# 	# Convert data to JSON string
+	# 	msg_string = dill.dumps(msg)
+	# 	# msg_json = jsonpickle.encode(msg).encode()
+	# 	# data_len = str(len(msg_json)).encode
+	# 	data2send = struct.pack('>I', len(msg_string)) + msg_string
+	# 	logging.info('CMD: {}'.format(cmd))
+	# 	logging.info('Before dumping: {}'.format(sys.getsizeof(msg)))
+	# 	logging.info('After dumping: {}'.format(sys.getsizeof(data2send)))
+	# 	# server.sendall(data_len)
+	# 	server.sendall(data2send)
 
-	def recv_data(self):
-		# datalength : 4 bytes
-		raw_data = self.recvall(4)
-		if not raw_data:
-			return None, None
-		msg_len = struct.unpack('>I', raw_data)[0]
-		msg_string = self.recvall(msg_len)
-		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
-		msg = dill.loads(msg_string)
-		cmd = msg['CMD']
-		data = msg['DATA']
-		return cmd, data
+	# def recv_data(self):
+	# 	# datalength : 4 bytes
+	# 	raw_data = self.recvall(4)
+	# 	if not raw_data:
+	# 		return None, None
+	# 	msg_len = struct.unpack('>I', raw_data)[0]
+	# 	msg_string = self.recvall(msg_len)
+	# 	# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
+	# 	msg = dill.loads(msg_string)
+	# 	cmd = msg['CMD']
+	# 	data = msg['DATA']
+	# 	return cmd, data
 
-	#receive all raw data
-	def recvall(self, data_len):
-		data = bytearray()
-		while len(data)<data_len:
-			packet = self.client_socket.recv(data_len - len(data))
-			if not packet:
-				return None
-			data.extend(packet)
-		return data
-
-
+	# #receive all raw data
+	# def recvall(self, data_len):
+	# 	data = bytearray()
+	# 	while len(data)<data_len:
+	# 		packet = self.client_socket.recv(data_len - len(data))
+	# 		if not packet:
+	# 			return None
+	# 		data.extend(packet)
+	# 	return data
 
 
-class Report(object):
-	"""Federated learning client report."""
 
-	def __init__(self, id = 0, num_sample = 0):
-		self.weights = []
-		self.client_id = id
-		self.num_samples = num_sample
-	
+

@@ -590,7 +590,7 @@ class DQNServer(DQNTrainServer):
 		# Wait for reports
 		while not all(super().get_clientlist().get_report_state(sample_clients_ids)):
 			pass
-
+		super().get_clientlist().clear_report_state()
 		# Receive client updates
 		reports = self.reporting(sample_clients)
 

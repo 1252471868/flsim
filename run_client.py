@@ -3,7 +3,6 @@ import client
 import config
 import logging
 import os
-import server
 
 
 # Set up parser

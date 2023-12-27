@@ -7,54 +7,24 @@ import random
 import sys
 from threading import Thread, Lock
 import torch
+from TCPUDP_socket import TensorBuffer
 import utils.dists as dists  # pylint: disable=no-name-in-module
 import socket
 import socketserver
+import io
 import json
 import jsonpickle
 import dill
 from signal import signal, SIGPIPE, SIG_DFL
 import struct
+import TCPUDP_socket
 
 mutex = Lock()
 # clients list for server
-class ClientList(object):
-	def __init__(self):
-		self.id_list = []
-		self.socket_list = []
-		self.report_state_list = []
-		self.report_list = []
-	
-	def add_client(self, client_id, client_socket):
-		self.id_list.append(client_id)
-		self.socket_list.append(client_socket)		
-		self.report_state_list.append(False)
-		self.report_list.append(client.Report())
 
-	def get_socket(self, client_id):
-		return self.socket_list[self.id_list.index(client_id)]
-	
-	def get_id(self, client_socket):
-		return self.id_list[self.socket_list.index(client_socket)]
-	
-	def set_report_state(self, client_id):
-		self.report_state_list[self.id_list.index(client_id)] = True
-
-	def clear_report_state(self):
-		self.report_state_list = [False for r in self.report_state_list]
-
-	def get_report_state(self, client_id):
-		state = [self.report_state_list[self.id_list.index(id)] for id in client_id]
-		return state
-	
-	def set_report(self, client_id, report):
-		self.report_list[self.id_list.index(client_id)] = report
-
-	def get_report(self, client_id):
-		return self.report_list[self.id_list.index(client_id)]
 	
 
-clients_list = ClientList()
+
 
 class Server(object):
 	"""Basic federated learning server."""
@@ -73,12 +43,15 @@ class Server(object):
 		# Add fl_model to import path
 		sys.path.append(model_path)
 
-		# Set up simulated server
+		# Set up server
 		self.load_data()
 		self.load_model()
+		server_ip = self.config.server.socket.get('ip')
+		server_port = self.config.server.socket.get('port')
+		self.socket = TCPUDP_socket.TCPUDPServer(SERVER=server_ip,NUM_CLIENTS=client_cfg.total)
 		self.connect_clients(client_cfg)
 
-	def seed(self, seed=123):
+	def seed(self, seed=1234):
 		torch.manual_seed(seed)
 		torch.cuda.manual_seed_all(seed)
 		np.random.seed(seed)
@@ -132,24 +105,30 @@ class Server(object):
 			self.saved_reports = {}
 			self.save_reports(0, [])  # Save initial model
 
-	def msg_handler(self, server_ip,server_port):
-		logging.info('Server started, waiting for connecting')
-		socketserver.TCPServer.allow_reuse_address = True
-		s=socketserver.ThreadingTCPServer((server_ip,server_port), TCPServerHandler)
-		s.serve_forever()
+	# def msg_handler(self, server_ip,server_port):
+	# 	logging.info('Server started, waiting for connecting')
+	# 	# if self.config.server.socket.get('protocol') == 'tcp':
+	# 	socketserver.TCPServer.allow_reuse_address = True	
+	# 	s=socketserver.ThreadingTCPServer((server_ip,server_port), TCPServerHandler)
+	# 	# elif self.config.server.socket.get('protocol') == 'udp':
+	# 	# 	socketserver.UDPServer.allow_reuse_address = True
+	# 	# 	s=socketserver.ThreadingUDPServer((server_ip,server_port), TCPServerHandler)
+	# 	s.serve_forever()
 
 	def connect_clients(self, client_cfg):
 		IID = self.config.data.IID
 		labels = self.loader.labels
 		loader = self.config.loader
 		loading = self.config.data.loading
-		signal(SIGPIPE, SIG_DFL)
-		server_ip = self.config.server.socket.get('ip')
-		server_port = self.config.server.socket.get('port')
-		msg_thread = Thread(target=self.msg_handler, args=(server_ip,server_port,))
-		msg_thread.start()
+		self.socket.start(client_cfg.total)
+		# self.socket.listen_K_clients(client_cfg.total)
+		# signal(SIGPIPE, SIG_DFL)
+		# server_ip = self.config.server.socket.get('ip')
+		# server_port = self.config.server.socket.get('port')
+		# msg_thread = Thread(target=self.msg_handler, args=(server_ip,server_port,))
+		# msg_thread.start()
 		#Wait for connection
-		while len(clients_list.id_list) < client_cfg.total :
+		while len(self.socket.clients_list.id_list) < client_cfg.total :
 			pass
  # Make simulated clients
 		if not IID:  # Create distribution for label preferences if non-IID
@@ -188,7 +167,7 @@ class Server(object):
 
 
 
-		self.send_data(0,'INFO','test')
+		# self.send_data(0,'INFO','test')
 		# self.send_data(1,'INFO','test')
 		if loading == 'static':
 			if loader == 'shard':  # Create data shards
@@ -234,7 +213,8 @@ class Server(object):
 			logging.info('Saved reports: {}'.format(reports_path))
 		
 		for client in self.clients:
-			self.send_data(client.client_id, 'END', 0)
+			# self.send_data(client.client_id, 'END', 0)
+			self.socket.send(client.client_id, 'END', msg_tcp=0)
 		logging.info('*******************Completed*********************')
 
 	def round(self):
@@ -248,9 +228,10 @@ class Server(object):
 		self.configuration(sample_clients)
 
 		# Wait for reports
-		while not all(clients_list.get_report_state(sample_clients_id)):
+		# self.socket.listen_K_clients(len(sample_clients))
+		while not all(self.socket.clients_list.get_report_state(sample_clients_id)):
 			pass
-		clients_list.clear_report_state()
+		self.socket.clients_list.clear_report_state()
 		# Run clients using multithreading for better parallelism
 		# threads = [Thread(target=client.run) for client in sample_clients]
 		# [t.start() for t in threads]
@@ -265,10 +246,11 @@ class Server(object):
 
 		# Load updated weights
 		fl_model.load_weights(self.model, updated_weights)
+		# fl_model.load_weights_noname(self.model, weights_unflattened)
 
 		# Extract flattened weights (if applicable)
-		if self.config.paths.reports:
-			self.save_reports(round, reports)
+		# if self.config.paths.reports:
+		# 	self.save_reports(round, reports)
 
 		# Save updated global model
 		self.save_model(self.model, self.config.paths.model)
@@ -299,6 +281,7 @@ class Server(object):
 		return sample_clients
 
 	def configuration(self, sample_clients):
+		import fl_model
 		loader_type = self.config.loader
 		loading = self.config.data.loading
 
@@ -308,6 +291,8 @@ class Server(object):
 				self.loader.create_shards()
 
 		# Configure selected clients for federated learning task
+		weights = fl_model.extract_weights_noname(self.model)
+		weights_flat = TensorBuffer(weights)
 		for client in sample_clients:
 			if loading == 'dynamic':
 				self.set_client_data(client)  # Send data partition to client
@@ -317,11 +302,19 @@ class Server(object):
 
 			# Continue configuraion on client
 			# client.configure(config)
-			self.send_data(client.client_id, 'MODEL', self.model)
+			# buffer = io.BytesIO()
+			# torch.save(self.model.state_dict(), buffer)
+			# model2send = buffer.getvalue()
+			if self.config.server.socket.get('protocol') == 'tcp':
+				# Convert tensor into narray, otherwise the size of the encoded tensor will be huge
+				self.socket.send(client.client_id, 'MODEL', msg_tcp=weights_flat.buffer.numpy())
+			elif self.config.server.socket.get('protocol') == 'udp':
+				self.socket.send(client.client_id, 'MODEL', msg_udp=weights_flat.buffer.numpy())
+			# self.send_data(client.client_id, 'MODEL', self.model)
 
 	def reporting(self, sample_clients):
 		# Recieve reports from sample clients
-		reports = [clients_list.get_report(client.client_id) for client in sample_clients]
+		reports = [self.socket.clients_list.get_report(client.client_id) for client in sample_clients]
 		logging.info('Reports recieved: {}'.format(len(reports)))
 		assert len(reports) == len(sample_clients)
 
@@ -331,29 +324,39 @@ class Server(object):
 		return self.federated_averaging(reports)
 
 	# Report aggregation
-	def extract_client_updates(self, reports):
+	def extract_client_updates(self, report):
 		import fl_model  # pylint: disable=import-error
 
 		# Extract baseline model weights
-		baseline_weights = fl_model.extract_weights(self.model)
-
+		# baseline_weights = fl_model.extract_weights(self.model)
+		baseline_weights = fl_model.extract_weights_noname(self.model)
+		baseline_flattened = TensorBuffer(baseline_weights) 
+		weights_flattened = TensorBuffer(baseline_weights)
 		# Extract weights from reports
-		weights = [report.weights for report in reports]
+		if self.config.server.socket.get('protocol') == 'udp':
+			indices = report.weights[:, 0]
+			weights = report.weights[:, 1]
+			weights_flattened.buffer[indices] = torch.from_numpy(weights)
+		elif self.config.server.socket.get('protocol') == 'tcp':
+			weights = report.weights
+			weights_flattened.buffer[:] = torch.from_numpy(weights)
+			
+		# weights = [report.weights for report in reports]
 
 		# Calculate updates from weights
 		updates = []
-		for weight in weights:
-			update = []
-			for i, (name, weight) in enumerate(weight):
-				bl_name, baseline = baseline_weights[i]
+		for i in range(len(weights_flattened)):
+			delta = weights_flattened[i] - baseline_flattened[i]
+			updates.append(delta)
+		# for weight in weights:
+		# 	update = []
+		# 	for i, (name, weight) in enumerate(weight):
+		# 		bl_name, baseline = baseline_weights[i]
 
-				# Ensure correct weight is being updated
-				assert name == bl_name
-
-				# Calculate update
-				delta = weight - baseline
-				update.append((name, delta))
-			updates.append(update)
+		# 		# Calculate update
+		# 		delta = weight - baseline
+		# 		update.append((name, delta))
+		# 	updates.append(update)
 
 		return updates
 
@@ -361,19 +364,22 @@ class Server(object):
 		import fl_model  # pylint: disable=import-error
 
 		# Extract updates from reports
-		updates = self.extract_client_updates(reports)
+		updates = [self.extract_client_updates(report) for report in reports ]
+		# updates = self.extract_client_updates(reports)
 
 		# Extract total number of samples
 		total_samples = sum([report.num_samples for report in reports])
 
 		# Perform weighted averaging
 		avg_update = [torch.zeros(x.size())  # pylint: disable=no-member
-					  for _, x in updates[0]]
+					  for x in updates[0]]
 		for i, update in enumerate(updates):
 			num_samples = reports[i].num_samples
-			for j, (_, delta) in enumerate(update):
-				# Use weighted average by number of samples
+			for j, delta in enumerate(update):	
 				avg_update[j] += delta * (num_samples / total_samples)
+			# for j, (_, delta) in enumerate(update):
+			# 	# Use weighted average by number of samples
+			# 	avg_update[j] += delta * (num_samples / total_samples)
 
 		# Extract baseline model weights
 		baseline_weights = fl_model.extract_weights(self.model)
@@ -425,16 +431,20 @@ class Server(object):
 		else:
 			logging.critical('Unknown data loader type')
 		# Send data to client
-		self.send_data(client.client_id, 'CONFIG', self.config)
-		self.send_data(client.client_id, 'DATA', data)
+		self.socket.send(client.client_id, 'CONFIG', msg_tcp=self.config)
+		self.socket.send(client.client_id, 'DATA', msg_tcp=data)
+		# self.send_data(client.client_id, 'CONFIG', self.config)
+		# self.send_data(client.client_id, 'DATA', data)
 		# client.set_data(data, self.config)
 
 	def set_client_bias(self, client, pref, bias):
 		client.set_bias(pref, bias)
-		self.send_data(client.client_id, 'BIAS', (pref, bias))
+		self.socket.send(client.client_id, 'BIAS', msg_tcp=(pref, bias))
+		# self.send_data(client.client_id, 'BIAS', (pref, bias))
 
 	def set_client_config(self, client):		
-		self.send_data(client.client_id, 'CONFIG', self.config)
+		self.socket.send(client.client_id, 'CONFIG', msg_tcp=self.config)
+		# self.send_data(client.client_id, 'CONFIG', self.config)
 
 	def save_model(self, model, path):
 		path += '/global'
@@ -452,77 +462,144 @@ class Server(object):
 		self.saved_reports['w{}'.format(round)] = self.flatten_weights(
 			fl_model.extract_weights(self.model))
 
-	def send_data(self, client_id, cmd, data):
-		msg = {}
-		msg['CMD'] = cmd
-		msg['DATA'] = data
-		# Convert data to JSON string
-		msg_string = dill.dumps(msg)
-		# msg_json = jsonpickle.encode(msg).encode()
-		# data_len = str(len(msg_json)).encode
-		data2send = struct.pack('>I', len(msg_string)) + msg_string
-		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
-		client_socket = clients_list.get_socket(client_id)
-		# server.sendall(data_len)
-		client_socket.sendall(data2send)
+	# def send_data(self, client_id, cmd, data):
+	# 	msg = {}
+	# 	msg['CMD'] = cmd
+	# 	msg['DATA'] = data
+	# 	# Convert data to JSON string
+	# 	# if cmd == 'MODEL':
+	# 	# 	data2send = data
+	# 	# 	data_string = dill.dumps(data)
+	# 	# 	logging.info('Model Before dumping: {}'.format(sys.getsizeof(data)))
+	# 	# 	logging.info('Model After dumping: {}'.format(sys.getsizeof(data_string)))
+	# 	# 	client_socket = clients_list.get_socket(client_id)
+	# 	# 	# server.sendall(data_len)
+	# 	# 	client_socket.sendall(data2send)
+	# 	# else:
+	# 	msg_string = dill.dumps(msg)
+	# 	# msg_json = jsonpickle.encode(msg).encode()
+	# 	# data_len = str(len(msg_json)).encode
+	# 	data2send = struct.pack('>I', len(msg_string)) + msg_string
+	# 	logging.info('CMD: {}'.format(cmd))
+	# 	logging.info('Before dumping: {}'.format(sys.getsizeof(msg)))
+	# 	logging.info('After dumping: {}'.format(sys.getsizeof(data2send)))
+	# 	client_socket = clients_list.get_socket(client_id)
+	# 	# server.sendall(data_len)
+	# 	client_socket.sendall(data2send)
 	
 	def get_clientlist(self):
-		return clients_list
+		return self.socket.clients_list
 
-class TCPServerHandler(socketserver.BaseRequestHandler):
-	def handle(self):
-		while True:
-			try:
-				cmd, data = self.recv_data()
-				# New clients will send ID to the server
-				if cmd == 'ID':
-					client_id = data
-					clients_list.add_client(client_id, self.request)
-					logging.info('Client {} connected'.format(client_id))
-					logging.info('Address: {}'.format(self.client_address))
-				if cmd == 'REPORT':
-					report = data
-					client_id = clients_list.get_id(self.request)
-					clients_list.set_report(client_id, report)
-					clients_list.set_report_state(client_id)
-					logging.info('Received report from client {} '.format(client_id))
-				if cmd == 'INFO':
-					logging.info('{}'.format(data))
-				
-
-			except Exception as e:
-				print(e)
-				print('exception occured ,go to accpet next ')
-				break
+# class TCPServerHandler(socketserver.BaseRequestHandler):
+# 	def handle(self):
+# 		while True:
+# 			try:
+# 				cmd, data = self.recv_data()
+# 				# New clients will send ID to the server
+# 				if cmd == 'ID':
+# 					client_id = data
+# 					clients_list.add_client(client_id, self.request)
+# 					logging.info('Client {} connected'.format(client_id))
+# 					logging.info('Address: {}'.format(self.client_address))
+# 				if cmd == 'REPORT':
+# 					report = data
+# 					client_id = clients_list.get_id(self.request)
+# 					clients_list.set_report(client_id, report)
+# 					clients_list.set_report_state(client_id)
+# 					logging.info('Received report from client {} '.format(client_id))
+# 				if cmd == 'INFO':
+# 					logging.info('{}'.format(data))
+# 			except Exception as e:
+# 				print(e)
+# 				print('exception occured ,go to accpet next ')
+# 				break
 			
-	def recv_data(self):
-		# datalength : 4 bytes
-		raw_data = self.recvall(4)
-		if not raw_data:
-			return None, None
-		msg_len = struct.unpack('>I', raw_data)[0]
-		# logging.info('data len json: {} size:{}'.format(data_len_json,len(data_len_json)))
-		# data_len = json.loads(data_len_json)
-		# data_len = jsonpickle.decode(data_len_json)
-		# logging.info('recv datasize: {}'.format(msg_len))
-		# data is split across multiple recv()
-		msg_string = self.recvall(msg_len)
-		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
-		msg = dill.loads(msg_string)
-		# msg =  jsonpickle.decode(msg_json.decode())
-		cmd = msg['CMD']
-		data = msg['DATA']
-		return cmd, data
+# 	def recv_data(self):
+# 		# datalength : 4 bytes
+# 		raw_data = self.recvall(4)
+# 		if not raw_data:
+# 			return None, None
+# 		msg_len = struct.unpack('>I', raw_data)[0]
+# 		# logging.info('data len json: {} size:{}'.format(data_len_json,len(data_len_json)))
+# 		# data_len = json.loads(data_len_json)
+# 		# data_len = jsonpickle.decode(data_len_json)
+# 		# logging.info('recv datasize: {}'.format(msg_len))
+# 		# data is split across multiple recv()
+# 		msg_string = self.recvall(msg_len)
+# 		# logging.info('recv msgsize: {}'.format(sys.getsizeof(msg_json)))
+# 		msg = dill.loads(msg_string)
+# 		# msg =  jsonpickle.decode(msg_json.decode())
+# 		cmd = msg['CMD']
+# 		data = msg['DATA']
+# 		return cmd, data
 	
-	#receive all raw data
-	def recvall(self, data_len):
-		data = bytearray()
-		while len(data)<data_len:
-			packet = self.request.recv(data_len - len(data))
-			if not packet:
-				return None
-			data.extend(packet)
-		return data
+# 	#receive all raw data
+# 	def recvall(self, data_len):
+# 		data = bytearray()
+# 		while len(data)<data_len:
+# 			packet = self.request.recv(data_len - len(data))
+# 			if not packet:
+# 				return None
+# 			data.extend(packet)
+# 		return data
+
+# 	def send_data(self, client_id, cmd, data):
+# 		msg = {}
+# 		msg['CMD'] = cmd
+# 		msg['DATA'] = data
+# 		# Convert data to JSON string
+# 		# if cmd == 'MODEL':
+# 		# 	data2send = data
+# 		# 	data_string = dill.dumps(data)
+# 		# 	logging.info('Model Before dumping: {}'.format(sys.getsizeof(data)))
+# 		# 	logging.info('Model After dumping: {}'.format(sys.getsizeof(data_string)))
+# 		# 	client_socket = clients_list.get_socket(client_id)
+# 		# 	# server.sendall(data_len)
+# 		# 	client_socket.sendall(data2send)
+# 		# else:
+# 		msg_string = dill.dumps(msg)
+# 		# msg_json = jsonpickle.encode(msg).encode()
+# 		# data_len = str(len(msg_json)).encode
+# 		data2send = struct.pack('>I', len(msg_string)) + msg_string
+# 		logging.info('CMD: {}'.format(cmd))
+# 		logging.info('Before dumping: {}'.format(sys.getsizeof(msg)))
+# 		logging.info('After dumping: {}'.format(sys.getsizeof(data2send)))
+# 		client_socket = clients_list.get_socket(client_id)
+# 		# server.sendall(data_len)
+# 		client_socket.sendall(data2send)
+
+
+# class UDPServerHandler(socketserver.BaseRequestHandler):
+# 	def handle(self):
+# 		cmd, data = self.recv_data()
+# 		if cmd == 'ID':
+# 			client_id = data
+# 			clients_list.add_client(client_id, 0, self.client_address)
+# 			print('Client {} connected'.format(client_id))
+# 			print('Address: {}'.format(self.client_address))
+# 		elif cmd == 'ERROR':
+# 			print('error!')
+# 		self.send_data(client_id, 'ACK', 'server received')
+
+# 	def send_data(self, client_id, cmd, data):
+# 		msg = {}
+# 		msg['CMD'] = cmd
+# 		msg['DATA'] = data
+# 		# Convert data to JSON string
+# 		msg_string = dill.dumps(msg)
+# 		# msg_json = jsonpickle.encode(msg).encode()
+# 		# data_len = str(len(msg_json)).encode
+# 		data2send = msg_string
+# 		# logging.info('send datasize: {}'.format(sys.getsizeof(msg_json)))
+# 		client_addr = clients_list.get_addr(client_id)
+# 		# server.sendall(data_len)
+# 		self.request[1].sendto(data2send, client_addr)
+
+# 	def recv_data(self):
+# 		msg = dill.loads(self.request[0])
+# 		cmd = msg['CMD']
+# 		data = msg['DATA']
+# 		return cmd, data
 
 
 

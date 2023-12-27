@@ -84,6 +84,21 @@ def load_weights(model, weights):
 
     model.load_state_dict(updated_state_dict, strict=False)
 
+def extract_weights_noname(model):
+    weights = []
+    for weight in model.to(torch.device('cpu')).parameters():  # pylint: disable=no-member
+        if weight.requires_grad:
+            weights.append((weight.data))
+        # print(weight.size())
+    return weights
+
+def load_weights_noname(model, weights):
+    updated_state_dict = {}
+    idx=0
+    for name, _ in model.named_parameters():
+        updated_state_dict[name] = weights[idx]
+        idx=idx+1
+    model.load_state_dict(updated_state_dict, strict=False)
 
 def train(model, trainloader, optimizer, epochs):
     model.to(device)
