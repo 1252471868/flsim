@@ -152,7 +152,7 @@ print(weight_split[0].size())
 print(sys.getsizeof(weight_split))
 print(sys.getsizeof(weight_split[0]))
 weight_np = weight_split[4310].numpy()
-weight_np2 = np.concatenate((np.array([100]), weight_np), dtype=np.float32)
+weight_np2 = np.concatenate((np.array([100], dtype=np.float32), weight_np))
 weight_encoded_tensor = encode(weight_split[4310].numpy())
 # weight_encoded_tensor = encode(weights_flat.buffer)
 print('torch save:{}'.format(sys.getsizeof(weight_encoded_tensor)))
@@ -166,11 +166,15 @@ for idx, msg in enumerate(weight_split):
     start_idx_indices = torch.arange(start_idx, start_idx+len(idx_msg)-1)
     start_index_indices_grad = torch.vstack([start_idx_indices, idx_msg[1:]]).T
     buffer.append(start_index_indices_grad)
+
+    start_index_indices_np = np.arange(start_idx, start_idx + len(idx_msg) - 1, dtype=np.float32)
+    start_index_indices_grad_np = np.vstack([start_index_indices_np, idx_msg[1:]]).T
+    # buffer.append(start_index_indices_grad)
     
 msg = torch.cat(buffer)
 indices = msg[:, 0].long()
 weight_recv = msg[:, 1]
-print('size: {}'.format())
+# print('size: {}'.format())
 aggregated_weights[indices] = weight_recv
 weights_flat.buffer[:]=aggregated_weights
 print(weights_flat[0].size())

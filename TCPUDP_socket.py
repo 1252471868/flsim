@@ -172,7 +172,7 @@ class TCPUDPServer:
 		# messages = data.split(self.CHUNK)
 		addr = self.clients_list.get_addr(client_id)
 		for ind, message in enumerate(messages):
-			indexed_message = np.concatenate((np.array([ind * self.CHUNK]), message), dtype=np.float32)
+			indexed_message = np.concatenate((np.array([ind * self.CHUNK], dtype=np.float32), message))
 			encoded_message = self.encode(indexed_message)
 			rnd = np.random.uniform(0,1)
 			# if rnd<0.95:
@@ -222,6 +222,7 @@ class TCPUDPServer:
 	
 	def recv_UDP(self, client_id):
 		buffer = []
+		addr = None
 		while True:
 			try:
 				msg, addr = self.serverUDP[client_id].recvfrom(BUFFER)
@@ -240,7 +241,7 @@ class TCPUDPServer:
 
 			start_index = decoded_msg[0]
 			start_index_indices = np.arange(start_index, start_index + len(decoded_msg) - 1, dtype=np.float32)
-			start_index_indices_grad = np.vstack([start_index_indices, decoded_msg[1:]], dtype=np.float32).T
+			start_index_indices_grad = np.vstack([start_index_indices, decoded_msg[1:]]).T
 			buffer.append(start_index_indices_grad)
 		logging.info('UDP: received {} packets'.format(len(buffer)))
 		return buffer, addr
@@ -284,7 +285,7 @@ class TCPUDPServer:
 		return
 
 	def unpack_weights(self, raw_weights):
-		raw_weights = np.concatenate(raw_weights, dtype=np.float32)
+		raw_weights = np.concatenate(raw_weights)
 		indices = raw_weights[:, 0]
 		weights = raw_weights[:, 1]
 		return 
@@ -440,7 +441,7 @@ class TCPUDPClient:
 	def sendUDP(self, data):
 		messages = np.array_split(data,  np.arange(self.CHUNK, len(data), self.CHUNK))
 		for ind, message in enumerate(messages):
-			indexed_message = np.concatenate((np.array([ind * self.CHUNK]), message), dtype=np.float32)
+			indexed_message = np.concatenate((np.array([ind * self.CHUNK], dtype=np.float32), message))
 			encoded_message = self.encode(indexed_message)
 			rnd = np.random.uniform(0,1)
 			# if rnd<0.95:
@@ -510,7 +511,7 @@ class TCPUDPClient:
 
 			start_index = decoded_msg[0]
 			start_index_indices = np.arange(start_index, start_index + len(decoded_msg) - 1, dtype=np.float32)
-			start_index_indices_grad = np.vstack([start_index_indices, decoded_msg[1:]], dtype=np.float32).T
+			start_index_indices_grad = np.vstack([start_index_indices, decoded_msg[1:]]).T
 			buffer.append(start_index_indices_grad)
 		logging.info('UDP: received {} packets'.format(len(buffer)))
 		return buffer	

@@ -1,6 +1,6 @@
 {
     "clients": {
-        "total": 2,
+        "total": 1,
         "per_round":1,
         "label_distribution": "uniform",
         "do_test": false,
