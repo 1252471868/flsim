@@ -7,6 +7,7 @@ import logging
 import dill
 import struct
 import numpy as np
+import random
 from signal import signal, SIGPIPE, SIG_DFL
 
 BUFFER = 1024 * 64
@@ -90,6 +91,11 @@ class Report(object):
 		self.weights = []
 		self.client_id = id
 		self.num_samples = num_sample
+		self.training_latency = 0
+		self.comm_latency = 0
+		self.comm_cost = 0
+		self.data_size = 0
+		self.loss = 0
 	
 
 class TCPUDPServer:
@@ -174,9 +180,10 @@ class TCPUDPServer:
 		for ind, message in enumerate(messages):
 			indexed_message = np.concatenate((np.array([ind * self.CHUNK], dtype=np.float32), message))
 			encoded_message = self.encode(indexed_message)
-			rnd = np.random.uniform(0,1)
-			# if rnd<0.95:
-			self.serverUDP[client_id].sendto(encoded_message, addr)
+			# rnd = np.random.uniform(0,1)
+			# rnd = random.uniform(0,1)
+			# if rnd<0.9:
+			self.serverUDP[client_id].sendto(encoded_message, addr)	
 			time.sleep(self.DELAY)
 
 		return
@@ -298,6 +305,7 @@ class TCPUDPServer:
 				# New clients will send ID to the server
 				if cmd == 'ID':
 					client_id = data[0]
+				# if udp_addr != None:
 					self.clients_list.add_client(client_id, conn, udp_addr)
 					logging.info('Client {} connected'.format(client_id))
 					logging.info('TCP Address: {}'.format(addr))
@@ -314,6 +322,13 @@ class TCPUDPServer:
 					self.clients_list.set_report(client_id, report)
 					self.clients_list.set_report_state(client_id)
 					logging.info('Received report from client {} '.format(client_id))
+				elif cmd == 'PROBING_REPORT':
+					report = data
+					# weights = data[1]
+					client_id = self.clients_list.get_id(conn)
+					self.clients_list.set_report(client_id, report)
+					self.clients_list.set_report_state(client_id)
+					logging.info('Received probing report from client {} '.format(client_id))
 				else:
 					logging.info('{}: {}'.format(cmd, data))
 
@@ -443,8 +458,9 @@ class TCPUDPClient:
 		for ind, message in enumerate(messages):
 			indexed_message = np.concatenate((np.array([ind * self.CHUNK], dtype=np.float32), message))
 			encoded_message = self.encode(indexed_message)
-			rnd = np.random.uniform(0,1)
-			# if rnd<0.95:
+			# rnd = np.random.uniform(0,1)
+			# rnd = random.uniform(0,1)
+			# if rnd<0.9:
 			self.clientUDP.sendto(encoded_message, self.UDP_ADDR)
 			time.sleep(self.DELAY)
 

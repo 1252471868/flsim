@@ -103,6 +103,8 @@ def load_weights_noname(model, weights):
 def train(model, trainloader, optimizer, epochs):
     model.to(device)
     model.train()
+    total_loss = 0
+    total_batches = 0
     for epoch in range(1, epochs + 1):
         for batch_id, (image, label) in enumerate(trainloader):
             image, label = image.to(device), label.to(device)
@@ -111,11 +113,15 @@ def train(model, trainloader, optimizer, epochs):
             loss = F.nll_loss(output, label)
             loss.backward()
             optimizer.step()
+            total_loss += loss.item()
+            total_batches += 1
             if batch_id % log_interval == 0:
                 logging.debug('Epoch: [{}/{}]\tLoss: {:.6f}'.format(
                     epoch, epochs, loss.item()))
             del image, label, output, loss
             torch.cuda.empty_cache()
+    average_loss = total_loss / total_batches
+    return average_loss
 
 
 def test(model, testloader):

@@ -18,6 +18,7 @@ import dill
 from signal import signal, SIGPIPE, SIG_DFL
 import struct
 import TCPUDP_socket
+from datetime import datetime
 
 mutex = Lock()
 # clients list for server
@@ -196,6 +197,9 @@ class Server(object):
 		for round in range(1, rounds + 1):
 			logging.info('**** Round {}/{} ****'.format(round, rounds))
 
+			if self.config.fl.probing_train:
+				# logging.info('Probing training.....\n')
+				self.probing_training()
 			# Run the federated learning round
 			accuracy = self.round()
 			
@@ -232,14 +236,16 @@ class Server(object):
 		while not all(self.socket.clients_list.get_report_state(sample_clients_id)):
 			pass
 		self.socket.clients_list.clear_report_state()
-		# Run clients using multithreading for better parallelism
-		# threads = [Thread(target=client.run) for client in sample_clients]
-		# [t.start() for t in threads]
-		# [t.join() for t in threads]
 
 		# Recieve client updates
 		reports = self.reporting(sample_clients)
-
+		comm_latencies = np.zeros(self.config.clients.total)
+		rest_training_latencies = np.zeros(self.config.clients.total)
+		for i,report in zip(sample_clients_id, reports):
+			time_diff = datetime.now() - report.comm_latency
+			report.comm_latency=time_diff.total_seconds()
+			comm_latencies[i] = report.comm_latency
+			rest_training_latencies[i] = report.training_latency
 		# Perform weight aggregation
 		logging.info('Aggregating updates')
 		updated_weights = self.aggregation(reports)
@@ -270,6 +276,34 @@ class Server(object):
 
 	# Federated learning phases
 
+	def probing_training(self):
+		import fl_model  # pylint: disable=import-error
+		clients = self.clients
+		# Configure clients to train on local data
+		logging.info('Probing training...')
+		self.configuration(clients, probing_training=True)     
+		sample_clients_ids = [client.client_id for client in clients]   
+		# Train on local data for profiling purposes
+		# Wait for reports
+		while not all(self.socket.clients_list.get_report_state(sample_clients_ids)):
+			pass
+		self.socket.clients_list.clear_report_state()
+		# Recieve client reports
+		reports = self.reporting(clients)
+		probing_losses=[]
+		probing_latencies=[]
+		comm_latencies = []
+		for report in reports:
+			time_diff = datetime.now() - report.comm_latency
+			report.comm_latency=time_diff.total_seconds()
+			comm_latencies.append(report.comm_latency)
+			probing_losses.append(report.loss)
+			probing_latencies.append(report.training_latency)
+		# Perform weight aggregation
+		logging.info('Probing training completed')
+		return np.array(probing_losses), np.array(probing_latencies), np.array(comm_latencies)
+
+
 	def selection(self):
 		# Select devices to participate in round
 		clients_per_round = self.config.clients.per_round
@@ -280,7 +314,7 @@ class Server(object):
 
 		return sample_clients
 
-	def configuration(self, sample_clients):
+	def configuration(self, sample_clients, probing_training = False):
 		import fl_model
 		loader_type = self.config.loader
 		loading = self.config.data.loading
@@ -305,11 +339,18 @@ class Server(object):
 			# buffer = io.BytesIO()
 			# torch.save(self.model.state_dict(), buffer)
 			# model2send = buffer.getvalue()
-			if self.config.server.socket.get('protocol') == 'tcp':
-				# Convert tensor into narray, otherwise the size of the encoded tensor will be huge
-				self.socket.send(client.client_id, 'MODEL', msg_tcp=weights_flat.buffer.numpy())
-			elif self.config.server.socket.get('protocol') == 'udp':
-				self.socket.send(client.client_id, 'MODEL', msg_udp=weights_flat.buffer.numpy())
+			if probing_training == False:
+				if self.config.server.socket.get('protocol') == 'tcp':
+					# Convert tensor into narray, otherwise the size of the encoded tensor will be huge
+					self.socket.send(client.client_id, 'MODEL', msg_tcp=weights_flat.buffer.numpy())
+				elif self.config.server.socket.get('protocol') == 'udp':
+					self.socket.send(client.client_id, 'MODEL', msg_udp=weights_flat.buffer.numpy())
+			else:
+				if self.config.server.socket.get('protocol') == 'tcp':
+					# Convert tensor into narray, otherwise the size of the encoded tensor will be huge
+					self.socket.send(client.client_id, 'PROBING', msg_tcp=weights_flat.buffer.numpy())
+				elif self.config.server.socket.get('protocol') == 'udp':
+					self.socket.send(client.client_id, 'PROBING', msg_udp=weights_flat.buffer.numpy())
 			# self.send_data(client.client_id, 'MODEL', self.model)
 
 	def reporting(self, sample_clients):

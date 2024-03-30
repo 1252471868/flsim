@@ -37,7 +37,7 @@
     "server": {
         "type":"basic",
         "socket": {
-            "ip": "192.168.1.12",
+            "ip": "192.168.2.12",
             "port":5050,
             "protocol":"udp"
         }
@@ -62,5 +62,6 @@
         "saved_model": "output/dqn_models/dqn_model",
         "trained_model": "output/dqn_models/dqn_model_200.h5",
         "pca_model": "output/dqn_models/pca.pkl"
-    }
+    },
+    "marl":{}
 }

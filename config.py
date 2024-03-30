@@ -1,6 +1,8 @@
 from collections import namedtuple
 import json
 
+from sympy import true
+
 
 class Config(object):
     """Configuration module."""
@@ -48,8 +50,8 @@ class Config(object):
             self.loader = 'shard'
 
         # -- Federated learning --
-        fields = ['rounds', 'target_accuracy', 'task', 'epochs', 'batch_size']
-        defaults = (0, None, 'train', 0, 0)
+        fields = ['rounds', 'target_accuracy', 'task', 'epochs', 'batch_size', 'probing_train']
+        defaults = (0, None, 'train', 0, 0, False)
         params = [config['federated_learning'].get(field, defaults[i])
                   for i, field in enumerate(fields)]
         self.fl = namedtuple('fl', fields)(*params)
@@ -89,3 +91,12 @@ class Config(object):
         params = [config['dqn'].get(field, defaults[i])
                   for i, field in enumerate(fields)]
         self.dqn = namedtuple('dqn', fields)(*params)
+
+        # -- MARL --
+        fields = ['n_episodes', 'n_steps', 'n_eval_steps' , 'n_actions','n_agents','epsilon_anneal_scale', 
+                  'epsilon','anneal_epsilon', 'min_epsilon','hidden_dim', 'buffer_size','batch_size','reuse_network','train_steps',
+                   'save_cycle','load_model','lr','gamma','grad_norm_clip','target_update_cycle', 'model_dir']
+        defaults = (15, 3, 50, 2, 2, 'episode', 1,0.2, 0.01, 64, 16, 4, True,10,5,False,0.001,0.9,10,5, "output/marl_models")
+        params = [config['marl'].get(field, defaults[i])
+                  for i, field in enumerate(fields)]
+        self.marl = namedtuple('marl', fields)(*params)

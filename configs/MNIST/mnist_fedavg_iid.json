@@ -22,7 +22,8 @@
         "target_accuracy": 0.95,
         "task": "train",
         "epochs": 5,
-        "batch_size": 4
+        "batch_size": 4,
+        "probing_train": true
     },
     "model": "MNIST",
     "paths": {

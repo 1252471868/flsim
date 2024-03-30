@@ -6,6 +6,8 @@ import os
 import server
 import time
 
+# server_config = './configs/MNIST/mnist_marl_train_noniid.json'
+# server_config = './configs/MNIST/mnist_marl_eval_noniid.json'
 server_config = './configs/MNIST/mnist_fedavg_noniid.json'
 # server_config = './config.json'
 # Set up parser
@@ -42,6 +44,7 @@ def main():
         "magavg": server.MagAvgServer(fl_config, case_name),
         "dqn": server.DQNServer(fl_config, case_name), # DQN inference server 
         "dqntrain": server.DQNTrainServer(fl_config, case_name), # DQN train server
+        "marl": server.MARLTrainServer(fl_config, case_name), # DQN train server
     }[fl_config.server.type]
     fl_server.boot()
 
