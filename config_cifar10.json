@@ -1,0 +1,67 @@
+{
+    "clients": {
+        "total": 2,
+        "per_round":1,
+        "label_distribution": "uniform",
+        "do_test": false,
+        "test_partition": 0.2     
+    },
+    "data": {
+        "loading": "static",
+        "partition": {
+            "size": 600,
+            "range": [
+                50,
+                200
+            ]
+        },
+        "IID": false,
+        "bias": {
+            "primary": 0.8,
+            "secondary": false
+        }
+    },
+    "federated_learning": {
+        "rounds": 200,
+        "target_accuracy": 0.95,
+        "task": "train",
+        "epochs": 5,
+        "batch_size": 10
+    },
+    "model": "CIFAR-10",
+    "paths": {
+        "data": "./data",
+        "model": "./models",
+        "reports": "reports.pkl"
+    },
+    "server": {
+        "type":"basic",
+        "socket": {
+            "ip": "192.168.2.12",
+            "port":5050,
+            "protocol":"udp"
+        }
+    },
+    "dqn": {
+        "episode": 200,
+        "max_steps": 50,
+        "learning_rate": 0.0001,
+        "gamma": 0.95,
+        "epsilon_initial": 1.0,
+        "epsilon_decay": 0.95,
+        "epsilon_min": 0.01,
+        "memory_size": 200,
+        "batch_size": 4,
+        "target_update": 10,
+        "hidden_layers": [
+            256,
+            256
+        ],
+        "reward_xi": 64,
+        "rewards_log": "output/dqn_model_rewards.csv",
+        "saved_model": "output/dqn_models/dqn_model",
+        "trained_model": "output/dqn_models/dqn_model_200.h5",
+        "pca_model": "output/dqn_models/pca.pkl"
+    },
+    "marl":{}
+}

@@ -75,7 +75,7 @@ class Server(object):
 
 		logging.info('Dataset size: {}'.format(
 			sum([len(x) for x in [data[label] for label in labels]])))
-		logging.debug('Labels ({}): {}'.format(
+		logging.info('Labels ({}): {}'.format(
 			len(labels), labels))
 
 		# Set up data loader

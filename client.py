@@ -26,7 +26,7 @@ class Client(object):
 
 	def __init__(self, client_id):
 		self.client_id = client_id
-		self.pref = '-1'
+		self.pref = -1
 
 	def __repr__(self):
 		return 'Client #{}: {} samples in labels: {}'.format(
@@ -202,7 +202,8 @@ class Client(object):
 		# Generate report for server
 		self.report = TCPUDP_socket.Report(self.client_id, len(self.data))
 		# self.report.weights = weights
-		self.report.pref = int(self.pref.split(' - ')[0])
+		# self.report.pref = int(self.pref.split(' - ')[0])
+		self.report.pref = self.pref
 		self.report.loss = loss
 		self.report.training_latency = time_diff.total_seconds()
 		self.report.comm_latency = datetime.now()

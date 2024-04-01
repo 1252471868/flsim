@@ -4,10 +4,12 @@ import config
 import logging
 import os
 
-
+client_config = './config_mnist.json'
+# client_config = './config_fmnist.json'
+# client_config = './config_cifar10.json'
 # Set up parser
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', type=str, default='./config.json',
+parser.add_argument('-c', '--config', type=str, default=client_config,
                     help='Federated learning configuration file.')
 # parser.add_argument('-c', '--config', type=str, default='./configs/MNIST/mnist.json',
 #                     help='Federated learning configuration file.')

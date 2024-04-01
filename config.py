@@ -1,9 +1,6 @@
 from collections import namedtuple
 import json
 
-from sympy import true
-
-
 class Config(object):
     """Configuration module."""
 

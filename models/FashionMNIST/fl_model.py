@@ -34,7 +34,8 @@ class Generator(load_data.Generator):
                 transforms.Normalize(
                     (0.1307,), (0.3081,))
             ]))
-        self.labels = list(self.trainset.classes)
+        labels = list(self.trainset.classes)
+        self.labels = [index for index, _ in enumerate(labels)]
 
 
 class Net(nn.Module):
@@ -88,12 +89,28 @@ def load_weights(model, weights):
 
     model.load_state_dict(updated_state_dict, strict=False)
 
+def extract_weights_noname(model):
+    weights = []
+    for weight in model.to(torch.device('cpu')).parameters():  # pylint: disable=no-member
+        if weight.requires_grad:
+            weights.append((weight.data))
+        # print(weight.size())
+    return weights
+
+def load_weights_noname(model, weights):
+    updated_state_dict = {}
+    idx=0
+    for name, _ in model.named_parameters():
+        updated_state_dict[name] = weights[idx]
+        idx=idx+1
+    model.load_state_dict(updated_state_dict, strict=False)
 
 def train(model, trainloader, optimizer, epochs):
     model.to(device)
     model.train()
     criterion = nn.CrossEntropyLoss()
-
+    total_loss = 0
+    total_batches = 0
     for epoch in range(1, epochs + 1):
         for batch_id, data in enumerate(trainloader):
             inputs, labels = data
@@ -105,10 +122,13 @@ def train(model, trainloader, optimizer, epochs):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            total_loss += loss.item()
+            total_batches += 1
             if batch_id % log_interval == 0:
                 logging.debug('Epoch: [{}/{}]\tLoss: {:.6f}'.format(
                     epoch, epochs, loss.item()))
-
+    average_loss = total_loss / total_batches
+    return average_loss
 
 def test(model, testloader):
     model.to(device)

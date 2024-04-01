@@ -34,7 +34,8 @@ class Generator(load_data.Generator):
                 transforms.Normalize(
                     (0.1307,), (0.3081,))
             ]))
-        self.labels = list(self.trainset.classes)
+        labels = list(self.trainset.classes)
+        self.labels = [index for index, _ in enumerate(labels)]
 
 
 class Net(nn.Module):
