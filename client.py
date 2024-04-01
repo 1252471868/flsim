@@ -63,6 +63,8 @@ class Client(object):
 		# self.socket.send('INFO', msg_udp=[0])
 		# for i in range(5):
 		self.socket.send('ID', msg_tcp=self.client_id, msg_udp=[self.client_id])
+		# if self.config.server.socket.get('protocol') == 'udp':
+		self.socket.send('IP', msg_tcp=(self.client_id, self.socket.udp_addr))
 		
 		# self.send_data(self.client_socket, 'ID', self.client_id)
 		

@@ -306,10 +306,18 @@ class TCPUDPServer:
 				if cmd == 'ID':
 					client_id = data[0]
 				# if udp_addr != None:
-					self.clients_list.add_client(client_id, conn, udp_addr)
+					# self.clients_list.add_client(client_id, conn, udp_addr)
+					# logging.info('Client {} connected'.format(client_id))
+					# logging.info('TCP Address: {}'.format(addr))
+					# logging.info('UDP Address: {}'.format(udp_addr))
+				elif cmd == 'IP':
+					client_id = data[0]
+					client_udp_ip = data[1]
+					self.clients_list.add_client(client_id, conn, client_udp_ip)
 					logging.info('Client {} connected'.format(client_id))
 					logging.info('TCP Address: {}'.format(addr))
-					logging.info('UDP Address: {}'.format(udp_addr))
+					logging.info('UDP Address: {}'.format(client_udp_ip))
+
 				elif cmd == 'REPORT':
 					report = data[0]
 					# weights = data[1]
@@ -421,9 +429,16 @@ class TCPUDPClient:
 		self.clientTCP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.clientTCP.connect(self.TCP_ADDR)
 		# self.clientTCP.setblocking(1)
+		client_tcp_ip, client_tcp_port = self.clientTCP.getsockname()
+		logging.info('TCP ip :{}, {}'.format(client_tcp_ip, client_tcp_port))
 
 		self.clientUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.clientUDP.settimeout(self.TIMEOUT)
+
+		self.udp_ip = client_tcp_ip
+		self.udp_port = 0 
+		self.udp_addr = (self.udp_ip, 0)
+
 
 	def encode(self, data):
 		encoded = dill.dumps(data)
@@ -486,6 +501,10 @@ class TCPUDPClient:
 			self.sendTCP(msg_tcp)
 		if msg_type != 'tcp':
 			self.sendUDP(msg_udp)
+			client_udp_address, client_udp_port = self.clientUDP.getsockname()
+			# self.udp_port = client_udp_port
+			self.udp_addr = (self.udp_ip, client_udp_port)
+			# logging.info('UDP ip :{}, {}'.format(client_udp_address, client_udp_port))
 		self.sendTCP((self.END_OF_MESSAGE, cmd, msg_type, self.CLIENT_ID))
 		return
 	
