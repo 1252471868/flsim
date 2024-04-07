@@ -176,5 +176,9 @@ class VDN:
 		num = str(train_step // self.config.marl.save_cycle)
 		if not os.path.exists(self.model_dir):
 			os.makedirs(self.model_dir)
-		torch.save(self.eval_vdn_net.state_dict(), self.model_dir + '/' + 'vdn_net_params.pkl')
-		torch.save(self.eval_rnn.state_dict(),  self.model_dir + '/' + 'rnn_net_params.pkl')
+		if train_step == self.config.marl.train_steps:
+			torch.save(self.eval_vdn_net.state_dict(), self.model_dir + '/' + 'vdn_net_params.pkl')
+			torch.save(self.eval_rnn.state_dict(),  self.model_dir + '/'  +'rnn_net_params.pkl')
+		else:
+			torch.save(self.eval_vdn_net.state_dict(), self.model_dir + '/' +num+ '_vdn_net_params.pkl')
+			torch.save(self.eval_rnn.state_dict(),  self.model_dir + '/' + num +'_rnn_net_params.pkl')

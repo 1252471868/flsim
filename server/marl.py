@@ -31,7 +31,7 @@ class MARLTrainServer(Server):
 		self.probing_latencies = np.zeros(self.n_agents)
 		self.rest_training_latencies = np.zeros(self.n_agents)
 		self.comm_latencies = np.zeros(self.n_agents)
-		self.comm_costs = np.zeros(self.n_agents)
+		self.packet_losses = np.zeros(self.n_agents)
 		self.data_sizes = np.zeros(self.n_agents)
 		self.round_index = 0
 		self.acc = 0
@@ -59,7 +59,7 @@ class MARLTrainServer(Server):
 		indices  = np.where(np.array(actions)==1)[0]
 		if indices.size != 0:
 			# return -999
-			self.acc, self.comm_latencies, self.rest_training_latencies = self.round(actions)
+			self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions)
 		else:
 			self.acc = 0
 			self.comm_latencies = np.full(self.n_agents, 31)
@@ -68,7 +68,7 @@ class MARLTrainServer(Server):
 		max_sum = max(a + b for a, b in zip(self.comm_latencies / 1441, self.rest_training_latencies / 51))
 		# H_t=max(self.normalization(self.probing_latencies))+max_sum 
 		H_t=max(self.probing_latencies / 51)+max_sum 
-		reward = - self.w1*(self.U(self.acc)-self.U(self.acc_last))-self.w2*H_t-self.w3*max(self.comm_costs/45)
+		reward = - self.w1*(self.U(self.acc)-self.U(self.acc_last))-self.w2*H_t-self.w3*np.mean(self.packet_losses / 4.5)
 		self.acc_last = self.acc
 
 		return reward
@@ -95,11 +95,13 @@ class MARLTrainServer(Server):
 		reports = self.reporting(sample_clients)
 		comm_latencies = np.zeros(self.n_agents)
 		rest_training_latencies = np.zeros(self.n_agents)
+		packet_loss = np.zeros(self.n_agents)
 		for i,report in zip(sample_clients_id, reports):
 			time_diff = datetime.now() - report.comm_latency
 			report.comm_latency=time_diff.total_seconds()
 			comm_latencies[i] = report.comm_latency
 			rest_training_latencies[i] = report.training_latency
+			packet_loss[i] = report.packet_loss
 		# Perform weight aggregation
 		logging.info('Aggregating updates')
 		updated_weights = self.aggregation(reports)
@@ -128,7 +130,7 @@ class MARLTrainServer(Server):
 		logging.info('Average accuracy: {:.2f}%\n'.format(100 * accuracy))
 		with open(self.config.marl.model_dir+'/'+'accuracy'+'.csv', 'a') as f:
 				f.write('{},{:.4f}'.format(self.round_index, accuracy*100)+'\n')
-		return accuracy, comm_latencies, rest_training_latencies
+		return accuracy, comm_latencies, rest_training_latencies, packet_loss
 
 	def reset(self):
 		self.probing_losses = np.zeros(self.n_agents)
@@ -228,7 +230,7 @@ class MARLTrainServer(Server):
 				# 收集self.config.n_episodes个episodes
 				logging.info('-------- Episode: {} --------%\n'.format(i_episode))
 				episode, _, steps = self.generate_episode()
-				with open(self.config.marl.model_dir+'/'+'state'+'.pkl', 'ab') as f:
+				with open(self.config.marl.model_dir+'/'+'training_state'+'.pkl', 'ab') as f:
 					pickle.dump(episode, f)
 				i_episode += 1
 				# episode的每一项都是一个(1, episode_len, n_agents, 具体维度)四维数组，下面要把所有episode的的obs拼在一起
@@ -238,8 +240,11 @@ class MARLTrainServer(Server):
 					self.agents.train(mini_batch, train_step)
 		else:
 			logging.info('Evaluating......\n')
-			accuracy =  self.evaluate()
-			logging.info('Evaluated average accuracy: {:.2f}%\n'.format(100 * accuracy))
+			episode =  self.evaluate()
+			with open(self.config.marl.model_dir+'/'+'eval_state'+'.pkl', 'ab') as f:
+				pickle.dump(episode, f)
+
+			logging.info('Evaluation Completed.\n')
 
 		return
 	
@@ -272,6 +277,7 @@ class MARLTrainServer(Server):
 		 
 
 	def evaluate(self):
+		u, r, s, u_onehot, terminate, padded = [], [], [], [], [], []
 		self.reset()
 		step = 0
 		self.agents.policy.init_hidden(1)
@@ -296,13 +302,49 @@ class MARLTrainServer(Server):
 			if indices.size != 0:
 				self.acc, self.comm_latencies, self.rest_training_latencies = self.round(actions)
 				acc.append(self.acc)
-
 				with open(self.config.marl.model_dir+'/'+'eval_accuracy'+'.csv', 'a') as f:
 					f.write('{},{:.4f}'.format(step, self.acc*100)+'\n')
-		if len(acc) != 0:
-			accuracy = sum(acc) / len(acc)
-			return accuracy
-		return 0
+			s.append(state)
+			u.append(np.reshape(actions, [self.n_agents, 1]))
+			u_onehot.append(actions_onehot)
+			# avail_u.append(avail_actions)
+			r.append([0])
+
+		# if len(acc) != 0:
+		# 	accuracy = sum(acc) / len(acc)
+		# 	return accuracy
+		# last obs
+		# obs = self.env.get_obs()
+		state = self.get_state()
+		# o.append(obs)
+		s.append(state)
+		# o_next = o[1:]
+		s_next = s[1:]
+		# o = o[:-1]
+		s = s[:-1]
+		# get avail_action for last obs，because target_q needs avail_action in training
+
+		# if step < self.episode_limit，padding
+		for i in range(step, self.n_steps):
+			u.append(np.zeros([self.n_agents, 1]))
+			s.append(np.zeros(self.state_shape))
+			r.append([0.])
+			s_next.append(np.zeros(self.state_shape))
+			u_onehot.append(np.zeros((self.n_agents, self.n_actions)))
+
+		episode = dict(s=s.copy(),
+					   u=u.copy(),
+					   r=r.copy(),
+					   s_next=s_next.copy(),
+					   u_onehot=u_onehot.copy(),
+					   )
+		# add episode dim
+		for key in episode.keys():
+			episode[key] = np.array(episode[key])
+
+		# if not evaluate:
+		# 	self.epsilon = epsilon
+		return episode
 	
 	def select_top_k(self, losses):
 		top_k_index = np.argsort(losses)[-self.n_agents:]
@@ -316,9 +358,9 @@ class MARLTrainServer(Server):
 	def get_state_agent(self, agent_id):
 		#TODO
 		return [self.probing_losses[agent_id], 
-		  			self.rest_training_latencies[agent_id], 
+		  			self.probing_latencies[agent_id], 
 		  			self.comm_latencies[agent_id],
-					self.comm_costs[agent_id],
+					self.packet_losses[agent_id],
 					self.data_sizes[agent_id]
 					# self.round_index
 		  			]

@@ -96,6 +96,8 @@ class Report(object):
 		self.comm_cost = 0
 		self.data_size = 0
 		self.loss = 0
+		self.packet_loss = 0
+		self.packet_num = 0
 	
 
 class TCPUDPServer:
@@ -175,6 +177,7 @@ class TCPUDPServer:
 	
 	def sendUDP(self, client_id, data):
 		messages = np.array_split(data,  np.arange(self.CHUNK, len(data), self.CHUNK))
+		# logging.info('UDP: send {} packets'.format(len(messages)))
 		# messages = data.split(self.CHUNK)
 		addr = self.clients_list.get_addr(client_id)
 		for ind, message in enumerate(messages):
@@ -324,12 +327,15 @@ class TCPUDPServer:
 					if udp_addr is None:
 						weights = data[1]
 					else:
+						packet_num=len(data[1])
 						weights = np.concatenate(data[1], dtype=np.float32)
+					report.packet_loss = 1-packet_num/report.packet_num
 					report.weights = weights
 					client_id = self.clients_list.get_id(conn)
 					self.clients_list.set_report(client_id, report)
 					self.clients_list.set_report_state(client_id)
 					logging.info('Received report from client {} '.format(client_id))
+					logging.info('Packet loss rate: {}% '.format(report.packet_loss*100))
 				elif cmd == 'PROBING_REPORT':
 					report = data
 					# weights = data[1]

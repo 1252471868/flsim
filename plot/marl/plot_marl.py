@@ -4,7 +4,7 @@ import seaborn as sns
 import numpy as np
 import pickle
 
-num='4'
+num='3'
 
 data = []
 with open('output/marl_models/' + num +'/state.pkl', 'rb') as pickle_file:

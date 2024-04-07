@@ -211,6 +211,7 @@ class Client(object):
 		self.report.comm_latency = datetime.now()
 		#Since the model sizes are the same, the normalized communication cost is 1
 		self.report.comm_cost = 1
+		self.report.packet_num = np.ceil(len(weights_flat.buffer.numpy())/100)
 		
 		# Perform model testing if applicable
 		if self.do_test:
