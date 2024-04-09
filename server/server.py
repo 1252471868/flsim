@@ -197,8 +197,10 @@ class Server(object):
 		if self.config.fl.probing_train:
 			# logging.info('Probing training.....\n')
 			self.probing_losses, self.probing_latencies, self.comm_latencies = self.probing_training()
+			accuracy, self.comm_latencies, self.rest_training_latencies, self.packet_losses  = self.round(rest_training=True)
 		# Run the federated learning round
-		accuracy, self.comm_latencies, self.rest_training_latencies, self.packet_losses  = self.round()
+		else:
+			accuracy, self.comm_latencies, self.rest_training_latencies, self.packet_losses  = self.round()
 		state = self.get_state()
 		s.append(state)
 		# get avail_action for last obs，because target_q needs avail_action in training
@@ -269,7 +271,7 @@ class Server(object):
 			self.socket.send(client.client_id, 'END', msg_tcp=0)
 		logging.info('*******************Completed*********************')
 
-	def round(self):
+	def round(self, rest_training = False):
 		import fl_model  # pylint: disable=import-error
 
 		# Select clients to participate in the round
@@ -277,7 +279,7 @@ class Server(object):
 		sample_clients_id = [client.client_id for client in sample_clients]
 		logging.info("select clients: {}".format(sample_clients_id))
 		# Configure sample clients
-		self.configuration(sample_clients)
+		self.configuration(sample_clients, rest_training)
 
 		# Wait for reports
 		# self.socket.listen_K_clients(len(sample_clients))

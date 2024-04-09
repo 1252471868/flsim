@@ -1,4 +1,6 @@
 import pickle
+
+from sympy import true
 from server import Server
 import numpy as np
 import torch
@@ -57,7 +59,7 @@ class MARLTrainServer(Server):
 
 	def step(self, actions):
 		indices  = np.where(np.array(actions)==1)[0]
-		self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions)
+		self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions, rest_training=True)
 		# max_sum = max(a + b for a, b in zip(self.normalization(self.comm_latencies), self.normalization(self.rest_training_latencies)))
 		max_sum = max(a + b for a, b in zip(self.comm_latencies / 1441, self.rest_training_latencies / 51))
 		# H_t=max(self.normalization(self.probing_latencies))+max_sum 
@@ -68,7 +70,7 @@ class MARLTrainServer(Server):
 		return reward
 
 
-	def round(self, actions):
+	def round(self, actions, rest_training = False):
 		import fl_model  # pylint: disable=import-error
 		indices  = np.where(np.array(actions)==1)[0]
 		if indices.size == 0:
@@ -76,7 +78,7 @@ class MARLTrainServer(Server):
 		self.round_index=self.round_index+1
 		sample_clients=[self.clients[i] for i in indices]
 		sample_clients_id = [client.client_id for client in sample_clients]
-		self.configuration(sample_clients, rest_training= True)
+		self.configuration(sample_clients, rest_training)
 		
 		# Wait for reports
 		# self.socket.listen_K_clients(len(sample_clients))
