@@ -1,0 +1,44 @@
+{
+    "clients": {
+        "total": 1,
+        "per_round":1,
+        "label_distribution": "uniform",
+        "do_test": false,
+        "test_partition": 0.2     
+    },
+    "data": {
+        "loading": "static",
+        "partition": {
+            "size": 600,
+            "range": [
+                50,
+                200
+            ]
+        },
+        "IID": true
+    },
+    "federated_learning": {
+        "rounds": 200,
+        "target_accuracy": 0.98,
+        "task": "train",
+        "epochs": 5,
+        "batch_size": 4,
+        "probing_train": false
+    },
+    "model": "FashionMNIST",
+    "paths": {
+        "data": "./data",
+        "model": "./models",
+        "reports": "reports.pkl"
+    },
+    "server": {
+        "type":"basic",
+        "socket": {
+            "ip": "192.168.2.12",
+            "port":5050,
+            "protocol": "udp"
+        }
+    },
+    "dqn": {},
+    "marl":{}
+}

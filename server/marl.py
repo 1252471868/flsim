@@ -25,14 +25,14 @@ class MARLTrainServer(Server):
 
 		self.w1 = 1
 		self.w2 = 0.2
-		self.w3 = 0.1
+		self.w3 = 0.2
 		self.h_size=3
-		self.probing_losses = np.zeros(self.n_agents)
-		self.probing_latencies = np.zeros(self.n_agents)
-		self.rest_training_latencies = np.zeros(self.n_agents)
-		self.comm_latencies = np.zeros(self.n_agents)
-		self.packet_losses = np.zeros(self.n_agents)
-		self.data_sizes = np.zeros(self.n_agents)
+		# self.probing_losses = np.zeros(self.n_agents)
+		# self.probing_latencies = np.zeros(self.n_agents)
+		# self.rest_training_latencies = np.zeros(self.n_agents)
+		# self.comm_latencies = np.zeros(self.n_agents)
+		# self.packet_losses = np.zeros(self.n_agents)
+		# self.data_sizes = np.zeros(self.n_agents)
 		self.round_index = 0
 		self.acc = 0
 		self.acc_last = 0
@@ -57,13 +57,7 @@ class MARLTrainServer(Server):
 
 	def step(self, actions):
 		indices  = np.where(np.array(actions)==1)[0]
-		if indices.size != 0:
-			# return -999
-			self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions)
-		else:
-			self.acc = 0
-			self.comm_latencies = np.full(self.n_agents, 31)
-			self.rest_training_latencies = np.full(self.n_agents, 1.2)
+		self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions)
 		# max_sum = max(a + b for a, b in zip(self.normalization(self.comm_latencies), self.normalization(self.rest_training_latencies)))
 		max_sum = max(a + b for a, b in zip(self.comm_latencies / 1441, self.rest_training_latencies / 51))
 		# H_t=max(self.normalization(self.probing_latencies))+max_sum 
@@ -78,11 +72,11 @@ class MARLTrainServer(Server):
 		import fl_model  # pylint: disable=import-error
 		indices  = np.where(np.array(actions)==1)[0]
 		if indices.size == 0:
-			return 0, np.ones(self.n_agents), np.ones(self.n_agents)
+			return 0, np.full(self.n_agents, 31), np.full(self.n_agents, 1.2), np.full(self.n_agents, 0.2)
 		self.round_index=self.round_index+1
 		sample_clients=[self.clients[i] for i in indices]
 		sample_clients_id = [client.client_id for client in sample_clients]
-		self.configuration(sample_clients)
+		self.configuration(sample_clients, rest_training= True)
 		
 		# Wait for reports
 		# self.socket.listen_K_clients(len(sample_clients))
@@ -224,7 +218,7 @@ class MARLTrainServer(Server):
 	def run(self):
 		if not self.config.marl.load_model:
 			i_episode, train_steps, evaluate_steps = 0, 0, -1
-			with open(self.config.marl.model_dir+'/'+'accuracy'+'.csv', 'w') as f:
+			with open(self.config.marl.model_dir+'/'+'training_accuracy'+'.csv', 'w') as f:
 				f.write('round,accuracy\n')
 			while i_episode < self.config.marl.n_episodes:
 				# 收集self.config.n_episodes个episodes
@@ -299,16 +293,19 @@ class MARLTrainServer(Server):
 				actions.append(action)
 				actions_onehot.append(action_onehot)
 			indices  = np.where(np.array(actions)==1)[0]
-			if indices.size != 0:
-				self.acc, self.comm_latencies, self.rest_training_latencies = self.round(actions)
-				acc.append(self.acc)
-				with open(self.config.marl.model_dir+'/'+'eval_accuracy'+'.csv', 'a') as f:
-					f.write('{},{:.4f}'.format(step, self.acc*100)+'\n')
+			# if indices.size != 0:
+			self.acc, self.comm_latencies, self.rest_training_latencies, self.packet_losses = self.round(actions)
+			acc.append(self.acc)
+			with open(self.config.marl.model_dir+'/'+'eval_accuracy'+'.csv', 'a') as f:
+				f.write('{},{:.4f}'.format(step, self.acc*100)+'\n')
 			s.append(state)
 			u.append(np.reshape(actions, [self.n_agents, 1]))
 			u_onehot.append(actions_onehot)
 			# avail_u.append(avail_actions)
 			r.append([0])
+			if self.acc >= self.config.fl.target_accuracy:
+				logging.info('Target accuracy reached.')
+				break
 
 		# if len(acc) != 0:
 		# 	accuracy = sum(acc) / len(acc)

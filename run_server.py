@@ -10,7 +10,9 @@ import time
 server_config = './configs/MNIST/mnist_marl_eval_noniid.json'
 # server_config = './configs/MNIST/mnist_fedavg_noniid.json'
 # server_config = './configs/FashionMNIST/fmnist_fedavg_noniid.json'
+# server_config = './configs/FashionMNIST/fmnist_fedavg_iid.json'
 # server_config = './configs/CIFAR-10/cifar_fedavg_noniid.json'
+# server_config = './configs/CIFAR-10/cifar_fedavg_iid.json'
 # server_config = './config.json'
 # Set up parser
 parser = argparse.ArgumentParser()

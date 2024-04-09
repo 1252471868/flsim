@@ -124,6 +124,26 @@ def train(model, trainloader, optimizer, epochs):
     average_loss = total_loss / total_batches
     return average_loss
 
+def probing_train(model, trainloader, optimizer):
+    model.to(device)
+    model.train()
+    total_loss = 0
+    total_batches = 0
+
+    for batch_id, (image, label) in enumerate(trainloader):
+        image, label = image.to(device), label.to(device)
+        optimizer.zero_grad()
+        output = model(image)
+        loss = F.nll_loss(output, label)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        total_batches += 1
+        del image, label, output, loss
+        torch.cuda.empty_cache()
+    average_loss = total_loss / total_batches
+    return average_loss
+
 
 def test(model, testloader):
     model.to(device)

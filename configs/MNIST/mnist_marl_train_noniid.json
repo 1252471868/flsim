@@ -64,7 +64,7 @@
         "gamma": 0.9,
         "grad_norm_clip": 10,
         "target_update_cycle":2,
-        "model_dir": "output/marl_models/5"
+        "model_dir": "output/marl_models/6"
 
     },
     "dqn":{}

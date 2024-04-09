@@ -7,7 +7,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 
 # Training settings
-lr = 0.01
+lr = 0.001
 momentum = 0.5
 log_interval = 10
 
@@ -22,44 +22,68 @@ class Generator(load_data.Generator):
 
     # Extract FashionMNIST data using torchvision datasets
     def read(self, path):
+        image_size = 28
+        data_transform = transforms.Compose([
+            # transforms.ToPILImage(),  
+            # 这一步取决于后续的数据读取方式，如果使用内置数据集读取方式则不需要
+            transforms.Resize(image_size),
+            transforms.ToTensor()
+        ])
         self.trainset = datasets.FashionMNIST(
-            path, train=True, download=True, transform=transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.1307,), (0.3081,))
-            ]))
+            path, train=True, download=True, transform=data_transform)
         self.testset = datasets.FashionMNIST(
-            path, train=False, transform=transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.1307,), (0.3081,))
-            ]))
+            path, train=False, transform=data_transform)
         labels = list(self.trainset.classes)
         self.labels = [index for index, _ in enumerate(labels)]
 
 
+# class Net(nn.Module):
+#     def __init__(self):
+#         super(Net, self).__init__()
+#         self.layer1 = nn.Sequential(
+#             nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2),
+#             nn.BatchNorm2d(16),
+#             nn.ReLU(),
+#             nn.MaxPool2d(kernel_size=2, stride=2))
+#         self.layer2 = nn.Sequential(
+#             nn.Conv2d(16, 32, kernel_size=5, stride=1, padding=2),
+#             nn.BatchNorm2d(32),
+#             nn.ReLU(),
+#             nn.MaxPool2d(kernel_size=2, stride=2))
+#         self.fc = nn.Linear(7 * 7 * 32, 10)
+
+#     def forward(self, x):
+#         out = self.layer1(x)
+#         out = self.layer2(out)
+#         out = out.reshape(out.size(0), -1)
+#         out = self.fc(out)
+#         return out
+    
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(16),
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 32, 5),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(32),
+            nn.MaxPool2d(2, stride=2),
+            nn.Dropout(0.3),
+            nn.Conv2d(32, 64, 5),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
-        self.fc = nn.Linear(7 * 7 * 32, 10)
-
+            nn.MaxPool2d(2, stride=2),
+            nn.Dropout(0.3)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(64*4*4, 256),
+            nn.ReLU(),
+            nn.Linear(256, 10)
+        )
+        
     def forward(self, x):
-        out = self.layer1(x)
-        out = self.layer2(out)
-        out = out.reshape(out.size(0), -1)
-        out = self.fc(out)
-        return out
-
+        x = self.conv(x)
+        x = x.view(-1, 64*4*4)
+        x = self.fc(x)
+        # x = nn.functional.normalize(x)
+        return x
 
 def get_optimizer(model):
     return optim.Adam(model.parameters(), lr=lr)
@@ -70,7 +94,7 @@ def get_trainloader(trainset, batch_size):
 
 
 def get_testloader(testset, batch_size):
-    return torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=True)
+    return torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
 
 
 def extract_weights(model):

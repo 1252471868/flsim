@@ -166,7 +166,12 @@ class Client(object):
 				{
 					"train": self.train(probing_training=True)
 				}[self.task]
-
+			elif cmd == 'REST':
+				logging.info('rest training')
+				# self.configure(data)
+				{
+					"train": self.train(probing_training=False)
+				}[self.task]
 			elif cmd == 'END':
 				logging.info('Completed.')
 				# self.client_socket.close()
@@ -192,8 +197,13 @@ class Client(object):
 		start_time = datetime.now()
 		# Perform model training
 		trainloader = fl_model.get_trainloader(self.trainset, self.batch_size)
-		loss = fl_model.train(self.model, trainloader,
-					   self.optimizer, self.epochs)
+
+		if probing_training:
+			loss = fl_model.probing_train(self.model, trainloader,
+						self.optimizer)
+		else:
+			loss = fl_model.train(self.model, trainloader,
+						self.optimizer, self.epochs)
 		time_diff = datetime.now() - start_time
 		
 		logging.info('Client {} completed'.format(self.client_id))

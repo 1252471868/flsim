@@ -33,6 +33,12 @@ class Server(object):
 	def __init__(self, config, case_name):
 		self.config = config
 		self.case_name = case_name
+		self.probing_losses = np.zeros(self.config.clients.total)
+		self.probing_latencies = np.zeros(self.config.clients.total)
+		self.rest_training_latencies = np.zeros(self.config.clients.total)
+		self.comm_latencies = np.zeros(self.config.clients.total)
+		self.packet_losses = np.zeros(self.config.clients.total)
+		self.data_sizes = np.zeros(self.config.clients.total)
 
 	# Set up server
 	def boot(self):
@@ -177,7 +183,53 @@ class Server(object):
 			[self.set_client_data(client) for client in clients]
 		self.clients = clients
 
+	def reset(self):
+		self.probing_losses = np.zeros(self.config.clients.total)
+		self.probing_latencies = np.zeros(self.config.clients.total)
+		self.rest_training_latency = np.zeros(self.config.clients.total)
+		self.comm_latency = np.zeros(self.config.clients.total)
+		self.comm_cost = np.zeros(self.config.clients.total)
+		self.data_size = np.zeros(self.config.clients.total)
 
+	def generate_episode(self):
+		u, r, s, u_onehot, terminate, padded = [], [], [], [], [], []
+		self.reset()
+		if self.config.fl.probing_train:
+			# logging.info('Probing training.....\n')
+			self.probing_losses, self.probing_latencies, self.comm_latencies = self.probing_training()
+		# Run the federated learning round
+		accuracy, self.comm_latencies, self.rest_training_latencies, self.packet_losses  = self.round()
+		state = self.get_state()
+		s.append(state)
+		# get avail_action for last obs，because target_q needs avail_action in training
+		episode = dict(s=s.copy(),
+					   )
+		# add episode dim
+		for key in episode.keys():
+			episode[key] = np.array(episode[key])
+
+		return accuracy, episode
+
+
+	def get_state_agent(self, agent_id):
+		#TODO
+		return [self.probing_losses[agent_id], 
+		  			self.probing_latencies[agent_id], 
+		  			self.comm_latencies[agent_id],
+					self.packet_losses[agent_id],
+					self.data_sizes[agent_id]
+					# self.round_index
+		  			]
+
+	
+	def get_state(self):
+		"""Returns all agent observations in a list.
+		NOTE: Agents should have access only to their local observations
+		during decentralised execution.
+		"""
+		agents_state = [self.get_state_agent(i) for i in range(self.config.clients.total)]
+		return agents_state
+	
 	# Run federated learning
 	def run(self):
 		rounds = self.config.fl.rounds
@@ -197,11 +249,7 @@ class Server(object):
 		for round in range(1, rounds + 1):
 			logging.info('**** Round {}/{} ****'.format(round, rounds))
 
-			if self.config.fl.probing_train:
-				# logging.info('Probing training.....\n')
-				self.probing_training()
-			# Run the federated learning round
-			accuracy = self.round()
+			accuracy, episode = self.generate_episode()
 			
 			with open('output/'+self.case_name+'.csv', 'a') as f:
 				f.write('{},{:.4f}'.format(round, accuracy*100)+'\n')
@@ -241,11 +289,13 @@ class Server(object):
 		reports = self.reporting(sample_clients)
 		comm_latencies = np.zeros(self.config.clients.total)
 		rest_training_latencies = np.zeros(self.config.clients.total)
+		packet_loss = np.zeros(self.config.clients.total)
 		for i,report in zip(sample_clients_id, reports):
 			time_diff = datetime.now() - report.comm_latency
 			report.comm_latency=time_diff.total_seconds()
 			comm_latencies[i] = report.comm_latency
 			rest_training_latencies[i] = report.training_latency
+			packet_loss[i] = report.packet_loss
 		# Perform weight aggregation
 		logging.info('Aggregating updates')
 		updated_weights = self.aggregation(reports)
@@ -272,7 +322,7 @@ class Server(object):
 			accuracy = fl_model.test(self.model, testloader)
 
 		logging.info('Average accuracy: {:.2f}%\n'.format(100 * accuracy))
-		return accuracy
+		return accuracy, comm_latencies, rest_training_latencies, packet_loss
 
 	# Federated learning phases
 
@@ -293,6 +343,7 @@ class Server(object):
 		probing_losses=[]
 		probing_latencies=[]
 		comm_latencies = []
+		packet_losses = []
 		for report in reports:
 			time_diff = datetime.now() - report.comm_latency
 			report.comm_latency=time_diff.total_seconds()
@@ -314,10 +365,14 @@ class Server(object):
 
 		return sample_clients
 
-	def configuration(self, sample_clients, probing_training = False):
+	def configuration(self, sample_clients, probing_training = False, rest_training = False):
 		import fl_model
 		loader_type = self.config.loader
 		loading = self.config.data.loading
+		if rest_training:
+			for client in sample_clients:
+				self.socket.send(client.client_id, 'REST', msg_tcp=0)
+			return
 
 		if loading == 'dynamic':
 			# Create shards if applicable
@@ -330,15 +385,6 @@ class Server(object):
 		for client in sample_clients:
 			if loading == 'dynamic':
 				self.set_client_data(client)  # Send data partition to client
-
-			# Extract config for client
-			# config = self.config
-
-			# Continue configuraion on client
-			# client.configure(config)
-			# buffer = io.BytesIO()
-			# torch.save(self.model.state_dict(), buffer)
-			# model2send = buffer.getvalue()
 			if probing_training == False:
 				if self.config.server.socket.get('protocol') == 'tcp':
 					# Convert tensor into narray, otherwise the size of the encoded tensor will be huge
